@@ -189,13 +189,13 @@ namespace revit_mcp_plugin.UI
                 // If no command sets found, display a message
                 if (commandSets.Count == 0)
                 {
-                    MessageBox.Show("No command sets found. Please check if the Commands folder exists and contains valid command sets.",
+                    MessageBox.Show("未找到功能集，请检查 Commands 文件夹是否存在有效功能集",
                                   "No Command Sets", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error loading command sets: {ex.Message}", "Error",
+                MessageBox.Show($"加载功能集失败: {ex.Message}", "错误",
                                 MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -207,7 +207,7 @@ namespace revit_mcp_plugin.UI
             if (selectedCommandSet != null)
             {
                 NoSelectionTextBlock.Visibility = Visibility.Collapsed;
-                FeaturesHeaderTextBlock.Text = $"{selectedCommandSet.Name} - Command List";
+                FeaturesHeaderTextBlock.Text = $"{selectedCommandSet.Name} - 功能列表";
                 // Load commands from selected command set
                 foreach (var command in selectedCommandSet.Commands)
                 {
@@ -217,7 +217,7 @@ namespace revit_mcp_plugin.UI
             else
             {
                 NoSelectionTextBlock.Visibility = Visibility.Visible;
-                FeaturesHeaderTextBlock.Text = "Command List";
+                FeaturesHeaderTextBlock.Text = "功能列表";
             }
         }
 
@@ -290,7 +290,7 @@ namespace revit_mcp_plugin.UI
                 foreach (var commandSet in commandSets)
                 {
                     // 尝试从command.json中获取开发者信息
-                    var commandSetDeveloper = new DeveloperInfo { Name = "Unspecified", Email = "Unspecified" };
+                    var commandSetDeveloper = new DeveloperInfo { Name = "未指定", Email = "未指定" };
                     string commandJsonPath = Path.Combine(PathManager.GetCommandsDirectoryPath(),
                         commandSet.Name, "command.json");
                     if (File.Exists(commandJsonPath))
@@ -354,8 +354,8 @@ namespace revit_mcp_plugin.UI
                 // 序列化并保存到文件
                 string json = JsonConvert.SerializeObject(registry, Formatting.Indented);
                 File.WriteAllText(registryFilePath, json);
-                MessageBox.Show($"Command set settings successfully saved!\n\nEnabled {enabledCount} commands:\n{enabledFeaturesText}",
-                              "Settings Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"功能集设置保存成功!\n\nEnabled {enabledCount} commands:\n{enabledFeaturesText}",
+                              "设置已保存", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {

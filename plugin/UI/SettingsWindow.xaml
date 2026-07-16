@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:revit_mcp_plugin.UI"
              mc:Ignorable="d" 
-             Title="Settings" Height="500" Width="850">
+             Title="设置" Height="500" Width="850">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="200"/>
@@ -17,7 +17,7 @@
             <ListBox x:Name="NavListBox" BorderThickness="0" Background="Transparent" 
                      SelectionChanged="NavListBox_SelectionChanged">
                 <ListBoxItem x:Name="CommandSetItem" IsSelected="True" Padding="10,8">
-                    <TextBlock Text="CommandSet" FontSize="14"/>
+                    <TextBlock Text="功能集" FontSize="14"/>
                 </ListBoxItem>
                 <!-- 将来可以在此添加更多导航选项 -->
             </ListBox>

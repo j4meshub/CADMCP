@@ -14,8 +14,8 @@
         </Grid.RowDefinitions>
         <!-- Title -->
         <StackPanel Grid.Row="0" Margin="0,0,0,15">
-            <TextBlock Text="Command Set Settings" FontSize="22" FontWeight="SemiBold"/>
-            <TextBlock Text="Select the commands you want to enable" 
+            <TextBlock Text="功能集设置" FontSize="22" FontWeight="SemiBold"/>
+            <TextBlock Text="选择您要启用的功能" 
                        Foreground="#666666" Margin="0,5,0,0"/>
         </StackPanel>
         <!-- Main Content Area -->
@@ -31,7 +31,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="Available Command Sets" Padding="10,8" 
+                    <TextBlock Grid.Row="0" Text="可用功能集" Padding="10,8" 
                                Background="#f0f0f0" FontWeight="SemiBold"/>
                     <ListBox Grid.Row="1" x:Name="CommandSetListBox" 
                              SelectionChanged="CommandSetListBox_SelectionChanged"
@@ -58,12 +58,12 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" x:Name="FeaturesHeaderTextBlock" 
-                               Text="Feature List" Padding="10,8" 
+                               Text="功能列表" Padding="10,8" 
                                Background="#f0f0f0" FontWeight="SemiBold"/>
                     <ListView Grid.Row="1" x:Name="FeaturesListView" BorderThickness="0">
                         <ListView.View>
                             <GridView>
-                                <GridViewColumn Header="Enable" Width="50">
+                                <GridViewColumn Header="启用" Width="50">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}"
@@ -71,16 +71,16 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Header="Name" Width="150" 
+                                <GridViewColumn Header="名称" Width="150" 
                                                DisplayMemberBinding="{Binding CommandName}"/>
-                                <GridViewColumn Header="Description" Width="280" 
+                                <GridViewColumn Header="描述" Width="280" 
                                                DisplayMemberBinding="{Binding Description}"/>
                             </GridView>
                         </ListView.View>
                     </ListView>
                     <!-- Displayed when no command set is selected -->
                     <TextBlock Grid.Row="1" x:Name="NoSelectionTextBlock"
-                              Text="Please select a command set from the left to view its commands" 
+                              Text="请从左侧选择一个功能集查看其功能" 
                               HorizontalAlignment="Center" VerticalAlignment="Center"
                               Foreground="#999" FontSize="14" TextWrapping="Wrap"
                               Visibility="Collapsed"/>
@@ -89,11 +89,11 @@
         </Grid>
         <!-- Bottom Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-            <Button Content="Open CommandSet Folder" Width="150" Height="30" Margin="0,0,10,0" Click="OpenFolderButton_Click"/>
-            <Button Content="Refresh" Width="80" Height="30" Margin="0,0,10,0" Click="RefreshButton_Click"/>
-            <Button Content="Select All" Width="80" Height="30" Margin="0,0,10,0" Click="SelectAllButton_Click"/>
-            <Button Content="Deselect All" Width="80" Height="30" Margin="0,0,10,0" Click="UnselectAllButton_Click"/>
-            <Button Content="Save" Width="80" Height="30" Background="#0078D7" Foreground="White" 
+            <Button Content="打开功能集文件夹" Width="150" Height="30" Margin="0,0,10,0" Click="OpenFolderButton_Click"/>
+            <Button Content="刷新" Width="80" Height="30" Margin="0,0,10,0" Click="RefreshButton_Click"/>
+            <Button Content="全选" Width="80" Height="30" Margin="0,0,10,0" Click="SelectAllButton_Click"/>
+            <Button Content="取消全选" Width="80" Height="30" Margin="0,0,10,0" Click="UnselectAllButton_Click"/>
+            <Button Content="保存" Width="80" Height="30" Background="#0078D7" Foreground="White" 
                    Click="SaveButton_Click"/>
         </StackPanel>
     </Grid>

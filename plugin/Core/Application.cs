@@ -11,18 +11,18 @@ namespace revit_mcp_plugin.Core
     {
         public Result OnStartup(UIControlledApplication application)
         {
-            RibbonPanel mcpPanel = application.CreateRibbonPanel("Revit MCP Plugin");
+            RibbonPanel mcpPanel = application.CreateRibbonPanel("CTIEC Revit AI助手");
 
-            PushButtonData pushButtonData = new PushButtonData("ID_EXCMD_TOGGLE_REVIT_MCP", "Revit MCP\r\n Switch",
+            PushButtonData pushButtonData = new PushButtonData("ID_EXCMD_TOGGLE_REVIT_MCP", "开关",
                 Assembly.GetExecutingAssembly().Location, "revit_mcp_plugin.Core.MCPServiceConnection");
-            pushButtonData.ToolTip = "Open / Close mcp server";
+            pushButtonData.ToolTip = "开启 / 关闭 AI助手服务";
             pushButtonData.Image = new BitmapImage(new Uri("/RevitMCPPlugin;component/Core/Ressources/icon-16.png", UriKind.RelativeOrAbsolute));
             pushButtonData.LargeImage = new BitmapImage(new Uri("/RevitMCPPlugin;component/Core/Ressources/icon-32.png", UriKind.RelativeOrAbsolute));
             mcpPanel.AddItem(pushButtonData);
 
-            PushButtonData mcp_settings_pushButtonData = new PushButtonData("ID_EXCMD_MCP_SETTINGS", "Settings",
+            PushButtonData mcp_settings_pushButtonData = new PushButtonData("ID_EXCMD_MCP_SETTINGS", "设置",
                 Assembly.GetExecutingAssembly().Location, "revit_mcp_plugin.Core.Settings");
-            mcp_settings_pushButtonData.ToolTip = "MCP Settings";
+            mcp_settings_pushButtonData.ToolTip = "AI助手功能设置";
             mcp_settings_pushButtonData.Image = new BitmapImage(new Uri("/RevitMCPPlugin;component/Core/Ressources/settings-16.png", UriKind.RelativeOrAbsolute));
             mcp_settings_pushButtonData.LargeImage = new BitmapImage(new Uri("/RevitMCPPlugin;component/Core/Ressources/settings-32.png", UriKind.RelativeOrAbsolute));
             mcpPanel.AddItem(mcp_settings_pushButtonData);
