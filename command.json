@@ -1,6 +1,6 @@
 {
-  "name": "CTIEC Revit AI助手功能集",
-  "description": "基础功能集",
+  "name": "RevitMCPCommandSet",
+  "description": "CTIEC Revit AI助手基础功能集",
   "developer": {
     "name": "N",
     "email": "",
