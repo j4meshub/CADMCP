@@ -6,9 +6,11 @@
              xmlns:local="clr-namespace:revit_mcp_plugin.UI"
              mc:Ignorable="d" 
              Title="设置" Height="500" Width="850">
+
+    <!-- 左侧导航栏宽度 -->
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="70"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 

@@ -89,7 +89,7 @@
         </Grid>
         <!-- Bottom Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-            <Button Content="打开功能集文件夹" Width="150" Height="30" Margin="0,0,10,0" Click="OpenFolderButton_Click"/>
+            <Button Content="打开功能集文件夹" Width="120" Height="30" Margin="0,0,10,0" Click="OpenFolderButton_Click"/>
             <Button Content="刷新" Width="80" Height="30" Margin="0,0,10,0" Click="RefreshButton_Click"/>
             <Button Content="全选" Width="80" Height="30" Margin="0,0,10,0" Click="SelectAllButton_Click"/>
             <Button Content="取消全选" Width="80" Height="30" Margin="0,0,10,0" Click="UnselectAllButton_Click"/>

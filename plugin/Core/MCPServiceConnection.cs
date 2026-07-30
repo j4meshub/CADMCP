@@ -19,13 +19,13 @@ namespace revit_mcp_plugin.Core
                 if (service.IsRunning)
                 {
                     service.Stop();
-                    TaskDialog.Show("revitMCP", "Close Server");
+                    TaskDialog.Show("CTIEC Revit AI助手", "已关闭AI助手服务");
                 }
                 else
                 {
                     service.Initialize(commandData.Application);
                     service.Start();
-                    TaskDialog.Show("revitMCP", "Open Server");
+                    TaskDialog.Show("CTIEC Revit AI助手", "已开启AI助手服务");
                 }
 
                 return Result.Succeeded;
