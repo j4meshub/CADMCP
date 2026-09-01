@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>CADMCP.CommandSet</AssemblyName>
+    <RootNamespace>CADMCP.CommandSet</RootNamespace>
+    <AutoCadDir Condition="'$(ACAD2022_DIR)' != ''">$(ACAD2022_DIR)</AutoCadDir>
+    <AutoCadDir Condition="'$(AutoCadDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2022</AutoCadDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\plugin\CADMCP.Plugin.csproj" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageDownload Include="System.Runtime.CompilerServices.Unsafe" Version="[4.5.3]" />
+  </ItemGroup>
+  <ItemGroup><Reference Include="Microsoft.CSharp" /></ItemGroup>
+  <ItemGroup>
+    <Reference Include="AcCoreMgd"><HintPath>$(AutoCadDir)\AcCoreMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcDbMgd"><HintPath>$(AutoCadDir)\AcDbMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcMgd"><HintPath>$(AutoCadDir)\AcMgd.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="BuildBundle" AfterTargets="Build">
+    <PropertyGroup><BundleDir>$(MSBuildProjectDirectory)\..\artifacts\CADMCP.bundle</BundleDir><BundleContents>$(BundleDir)\Contents</BundleContents><CommandDir>$(BundleContents)\Commands</CommandDir></PropertyGroup>
+    <ItemGroup>
+      <CommandSetOutputFiles Include="$(TargetDir)**\*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(CommandDir)" />
+    <MakeDir Directories="$(CommandDir)" />
+    <Copy SourceFiles="@(CommandSetOutputFiles)" DestinationFolder="$(CommandDir)\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'%(Filename)%(Extension)' != 'Newtonsoft.Json.dll' and '%(Filename)%(Extension)' != 'CADMCP.Plugin.dll' and '%(Filename)%(Extension)' != 'CADMCP.Plugin.pdb'" />
+    <Copy SourceFiles="$(NuGetPackageRoot)system.runtime.compilerservices.unsafe\4.5.3\lib\net461\System.Runtime.CompilerServices.Unsafe.dll" DestinationFiles="$(CommandDir)\System.Runtime.CompilerServices.Unsafe.4.0.4.1.dll" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\plugin\bin\$(Configuration)\net48\CADMCP.Plugin.dll;$(MSBuildProjectDirectory)\..\plugin\bin\$(Configuration)\net48\Newtonsoft.Json.dll" DestinationFolder="$(BundleContents)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\bundle\PackageContents.xml" DestinationFolder="$(BundleDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

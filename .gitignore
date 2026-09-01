@@ -371,3 +371,9 @@ FodyWeavers.xsd
 # =============================================================================
 .claude/
 .DS_Store
+.npm-cache/
+.nuget-packages/
+.dotnet-home/
+artifacts/
+server/build/
+server/node_modules/

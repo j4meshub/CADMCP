@@ -3,24 +3,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./tools/register.js";
 
-// 创建服务器实例
-const server = new McpServer({
-  name: "mcp-server-for-revit",
-  version: "1.0.0",
-});
+const server = new McpServer({ name: "cadmcp-server", version: "1.0.0" });
+registerTools(server);
 
-// 启动服务器
-async function main() {
-  // 注册工具
-  await registerTools(server);
-
-  // 连接到传输层
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Revit MCP Server start success");
-}
-
-main().catch((error) => {
-  console.error("Error starting Revit MCP Server:", error);
+server.connect(new StdioServerTransport()).then(() => {
+  console.error("CADMCP Server 已启动");
+}).catch((error: unknown) => {
+  console.error("CADMCP Server 启动失败:", error);
   process.exit(1);
 });

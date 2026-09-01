@@ -1,11 +1,11 @@
 {
-    "name": "mcp-server-for-revit",
+    "name": "cadmcp-server",
     "version": "1.0.0",
-    "description": "MCP server for interacting with Autodesk Revit through AI assistants like Claude",
-    "main": "index.js",
+    "description": "通用 MCP stdio 服务器，用于通过 CADMCP 控制 AutoCAD 2022",
+    "main": "build/index.js",
     "type": "module",
     "bin": {
-        "mcp-server-for-revit": "./build/index.js"
+        "cadmcp-server": "./build/index.js"
     },
     "engines": {
         "node": ">=20.0.0"
@@ -14,7 +14,10 @@
         "clean": "rimraf build",
         "prebuild": "npm run clean",
         "build": "tsc",
-        "prepublishOnly": "npm run build"
+        "test": "npm run build && node --test tests/*.test.mjs",
+        "mcp:list": "node scripts/mcp-local-client.mjs list",
+        "mcp:call": "node scripts/mcp-local-client.mjs call",
+        "prepublishOnly": "npm test"
     },
     "files": [
         "build",
@@ -22,35 +25,31 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/mcp-servers-for-revit/mcp-servers-for-revit.git"
+        "url": "git+https://github.com/j4meshub/CADMCP.git"
     },
     "keywords": [
         "mcp",
-        "revit",
+        "autocad",
         "autodesk",
         "claude",
         "ai",
-        "bim",
-        "architecture"
+        "cad",
+        "drawing"
     ],
     "license": "MIT",
     "publishConfig": {
         "access": "public"
     },
     "bugs": {
-        "url": "https://github.com/mcp-servers-for-revit/mcp-servers-for-revit/issues"
+        "url": "https://github.com/j4meshub/CADMCP/issues"
     },
-    "homepage": "https://github.com/mcp-servers-for-revit/mcp-servers-for-revit#readme",
+    "homepage": "https://github.com/j4meshub/CADMCP#readme",
     "dependencies": {
-        "@modelcontextprotocol/sdk": "^1.7.0",
-        "better-sqlite3": "^12.8.0",
-        "ws": "^8.18.1",
+        "@modelcontextprotocol/sdk": "^1.30.0",
         "zod": "^3.24.2"
     },
     "devDependencies": {
-        "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^22.13.10",
-        "@types/ws": "^8.18.0",
         "rimraf": "^5.0.10",
         "typescript": "^5.8.2"
     }

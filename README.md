@@ -1,296 +1,81 @@
-[![Cover Image](./assets/cover.png?v=2)](https://github.com/mcp-servers-for-revit/mcp-servers-for-revit)
+# CADMCP
 
-# mcp-servers-for-revit
+CADMCP 是一个面向个人受信本地环境的 AutoCAD 2022 插件。它通过通用 stdio MCP 让 Claude、Codex、Cline 等客户端控制当前活动 DWG，并保留最重要的能力：AI 可以通过 `send_code_to_cad` 在 AutoCAD 进程内动态编译并执行 C#。
 
-**Connect AI assistants to Autodesk Revit via the Model Context Protocol.**
+## 支持边界
 
-mcp-servers-for-revit enables AI clients like Claude, Cline, and other MCP-compatible tools to read, create, modify, and delete elements in Revit projects. It consists of three components: a TypeScript MCP server that exposes tools to AI, a C# Revit add-in that bridges commands into Revit, and a command set that implements the actual Revit API operations.
+- Windows + AutoCAD 2022，插件目标为 .NET Framework 4.8。
+- 固定工具只承诺二维绘图；其他二维、三维和自动化能力由动态 C# 调用完整 AutoCAD .NET API 实现。
+- 仅操作当前 AutoCAD 进程中的当前活动 DWG 和活动空间，不维护 DWG 实体缓存数据库。
+- 动态代码拥有插件同等的文件、网络、进程与 AutoCAD API 完整权限，不提供沙箱。只应在个人受信环境使用。
+- 动态执行不支持长期等待 `Editor.GetPoint`、`GetSelection` 等用户交互。
 
-> [!NOTE]
-> This is a fork of the original [revit-mcp](https://github.com/mcp-servers-for-revit/revit-mcp) project with additional tools and functionality improvements.
+## 架构
 
-## Architecture
-
-```mermaid
-flowchart LR
-    Client["MCP Client<br/>(Claude, Cline, etc.)"]
-    Server["MCP Server<br/><code>server/</code>"]
-    Plugin["Revit Plugin<br/><code>plugin/</code>"]
-    CommandSet["Command Set<br/><code>commandset/</code>"]
-    Revit["Revit API"]
-
-    Client <-->|stdio| Server
-    Server <-->|WebSocket| Plugin
-    Plugin -->|loads| CommandSet
-    CommandSet -->|executes| Revit
+```text
+MCP 客户端 ↔ stdio ↔ cadmcp-server ↔ 127.0.0.1 TCP/JSON-RPC ↔ CADMCP 插件 ↔ 当前 DWG
 ```
 
-The **MCP Server** (TypeScript) translates tool calls from AI clients into WebSocket messages. The **Revit Plugin** (C#) runs inside Revit, listens for those messages, and dispatches them to the **Command Set** (C#), which executes the actual Revit API operations and returns results back up the chain.
+TCP 使用 4 字节大端长度前缀和 UTF-8 JSON，单帧最大 8 MiB。插件每次手动开启服务时生成临时 256-bit 令牌并写入 `%LocalAppData%\CADMCP\runtime\session.json`；Node 会校验协议版本和 AutoCAD 进程是否仍存活。
 
-## Requirements
+## MCP 工具
 
-- **Node.js 18+** (for the MCP server)
-- **Autodesk Revit 2020 - 2026** (any supported version)
+`say_hello`、`get_current_document_info`、`get_selected_entities`、`query_entities`、`send_code_to_cad`、`get_execution_status`、`create_line`、`create_polyline`、`create_circle`、`create_text`。
 
-## Quick Start (Using a Release)
+全部工具默认启用，可在 Ribbon 的“设置”中逐项关闭。禁用项仍在 MCP 工具列表中，调用时返回 `tool_disabled`。
 
-1. Download the ZIP for your Revit version from the [Releases](https://github.com/mcp-servers-for-revit/mcp-servers-for-revit/releases) page (e.g., `mcp-servers-for-revit-v1.0.0-Revit2025.zip`)
+固定绘图工具的坐标和长度以毫米输入，支持 `ucs`（默认）和 `wcs`。批量 `items` 在单一事务中原子创建；指定的图层或线型不存在时整批失败，不隐式创建资源。
 
-2. Extract the ZIP and copy the contents to your Revit addins folder:
-   ```
-   %AppData%\Autodesk\Revit\Addins\<your Revit version>\
-   ```
-   After copying you should have:
-   ```
-   Addins/2025/
-   ├── mcp-servers-for-revit.addin
-   └── revit_mcp_plugin/
-       ├── RevitMCPPlugin.dll
-       ├── ...
-       └── Commands/
-           └── RevitMCPCommandSet/
-               ├── command.json
-               └── 2025/
-                   ├── RevitMCPCommandSet.dll
-                   └── ...
-   ```
+## 动态 C#
 
-3. Configure the MCP server in your AI client (see [MCP Server Setup](#mcp-server-setup))
-
-4. Start Revit — if prompted about an unknown add-in, click **Always Load**
-
-5. In Revit, click the **Settings** button on the mcp-servers-for-revit ribbon tab, enable the commands you want to use, and click **Save**
-
-## MCP Server Setup
-
-The MCP server is published as an npm package and can be run directly with `npx`.
-
-**Claude Code**
-
-Run this in a **terminal** (not inside Claude Code):
-
-```bash
-claude mcp add mcp-server-for-revit -- cmd /c npx -y mcp-server-for-revit
-```
-
-**Claude Desktop**
-
-Claude Desktop → Settings → Developer → Edit Config → `claude_desktop_config.json`:
-
-```json
-{
-    "mcpServers": {
-        "mcp-server-for-revit": {
-            "command": "cmd",
-            "args": ["/c", "npx", "-y", "mcp-server-for-revit"]
-        }
-    }
-}
-```
-
-Restart Claude Desktop. When you see the hammer icon, the MCP server is connected.
-
-![Claude Desktop connection](./assets/claude.png)
-
-## Revit Plugin Setup
-
-If using a release ZIP, the plugin is already included. For manual installation:
-
-1. Build the plugin from `plugin/` (see [Development](#development))
-2. Copy `mcp-servers-for-revit.addin` to `%AppData%\Autodesk\Revit\Addins\<version>\`
-3. Copy the `revit_mcp_plugin/` folder to the same addins directory
-
-## Command Set Setup
-
-If using a release ZIP, the command set is pre-installed inside the plugin. For manual installation:
-
-1. Build the command set from `commandset/` (see [Development](#development))
-2. Inside the plugin's installation directory, create `Commands/RevitMCPCommandSet/<year>/`
-3. Copy the built DLLs into that folder
-4. Copy `command.json` (from repo root) into `Commands/RevitMCPCommandSet/`
-
-## Supported Tools
-
-| Tool | Description |
-| ---- | ----------- |
-| `get_current_view_info` | Get current active view info |
-| `get_current_view_elements` | Get elements from the current active view |
-| `get_available_family_types` | Get available family types in current project |
-| `get_selected_elements` | Get currently selected elements |
-| `get_material_quantities` | Calculate material quantities and takeoffs |
-| `ai_element_filter` | Intelligent element querying tool for AI assistants |
-| `analyze_model_statistics` | Analyze model complexity with element counts |
-| `create_point_based_element` | Create point-based elements (door, window, furniture) |
-| `create_line_based_element` | Create line-based elements (wall, beam, pipe) |
-| `create_surface_based_element` | Create surface-based elements (floor, ceiling, roof) |
-| `create_grid` | Create a grid system with smart spacing generation |
-| `create_level` | Create levels at specified elevations |
-| `create_room` | Create and place rooms at specified locations |
-| `create_dimensions` | Create dimension annotations in the current view |
-| `create_structural_framing_system` | Create a structural beam framing system |
-| `delete_element` | Delete elements by ID |
-| `operate_element` | Operate on elements (select, setColor, hide, etc.) |
-| `color_elements` | Color elements based on a parameter value |
-| `tag_all_walls` | Tag all walls in the current view |
-| `tag_all_rooms` | Tag all rooms in the current view |
-| `export_room_data` | Export all room data from the project |
-| `store_project_data` | Store project metadata in local database |
-| `store_room_data` | Store room metadata in local database |
-| `query_stored_data` | Query stored project and room data |
-| `send_code_to_revit` | Send C# code to Revit to execute |
-| `say_hello` | Display a greeting dialog in Revit (connection test) |
-
-## Testing
-
-The test project uses [Nice3point.TUnit.Revit](https://github.com/Nice3point/RevitUnit) to run integration tests against a live Revit instance. No separate addin installation is required — the framework injects into the running Revit process automatically.
-
-### Prerequisites
-
-- **.NET 10 SDK** — required by Nice3point.Revit.Sdk 6.1.0. Install via `winget install Microsoft.DotNet.SDK.10`
-- **Autodesk Revit 2026** (or 2025) — must be installed and licensed on your machine
-
-### Running Tests
-
-1. Open Revit 2026 (or 2025) and wait for it to fully load
-2. Run the tests from the command line:
-
-```bash
-# For Revit 2026
-dotnet test -c Debug.R26 -r win-x64 tests/commandset
-
-# For Revit 2025
-dotnet test -c Debug.R25 -r win-x64 tests/commandset
-```
-
-> **Note:** The `-r win-x64` flag is required on ARM64 machines because the Revit API assemblies are x64-only.
-
-Alternatively, you can use `dotnet run`:
-
-```bash
-cd tests/commandset
-dotnet run -c Debug.R26
-```
-
-### IDE Support
-
-- **JetBrains Rider** — enable "Testing Platform support" in Settings > Build, Execution, Deployment > Unit Testing > Testing Platform
-- **Visual Studio** — tests should be discoverable through the standard Test Explorer
-
-### Test Structure
-
-| Directory | Purpose |
-|-----------|---------|
-| `tests/commandset/AssemblyInfo.cs` | Global `[assembly: TestExecutor<RevitThreadExecutor>]` registration |
-| `tests/commandset/Architecture/` | Tests for level and room creation commands |
-| `tests/commandset/DataExtraction/` | Tests for model statistics, room data export, and material quantities |
-| `tests/commandset/ColorSplashTests.cs` | Tests for color override functionality |
-| `tests/commandset/TagRoomsTests.cs` | Tests for room tagging functionality |
-
-### Writing New Tests
-
-Test classes inherit from `RevitApiTest` and use TUnit's async assertion API:
+`send_code_to_cad` 接收 C# 方法体、具名 JSON 参数、可选 using、本地 DLL 绝对路径和 `auto | none` 事务模式。包装器提供：
 
 ```csharp
-public class MyTests : RevitApiTest
-{
-    private static Document _doc;
-
-    [Before(HookType.Class)]
-    [HookExecutor<RevitThreadExecutor>]
-    public static void Setup()
-    {
-        _doc = Application.NewProjectDocument(UnitSystem.Imperial);
-    }
-
-    [After(HookType.Class)]
-    [HookExecutor<RevitThreadExecutor>]
-    public static void Cleanup()
-    {
-        _doc?.Close(false);
-    }
-
-    [Test]
-    public async Task MyTest_Condition_ExpectedResult()
-    {
-        var elements = new FilteredElementCollector(_doc)
-            .WhereElementIsNotElementType()
-            .ToElements();
-
-        await Assert.That(elements.Count).IsGreaterThan(0);
-    }
-}
+document
+database
+editor
+transaction
+units
 ```
 
-## Development
+`auto` 会锁定文档并创建单一数据库事务；成功提交，异常回滚。`none` 仍锁定文档，但 `transaction` 为 `null`，副作用和撤销由代码负责。框架从不自动保存 DWG。
 
-### MCP Server
+Node 最长等待 5 分钟。超时不会强杀 AutoCAD 线程，而会返回 `timeout_unknown` 和 `callId`，之后可用 `get_execution_status` 查询。动态程序集在进程内不可卸载；默认编译 100 次后提示重启，但不停止核心能力。
 
-```bash
+## 构建
+
+要求 Node.js 20+、.NET SDK，以及本机 AutoCAD 2022。默认从 `C:\Program Files\Autodesk\AutoCAD 2022` 引用 `AcCoreMgd.dll`、`AcDbMgd.dll`、`AcMgd.dll`；也可设置 `ACAD2022_DIR`。这些宿主程序集均不复制到 Bundle。
+
+```powershell
 cd server
 npm install
-npm run build
+npm test
+
+cd ..
+$env:ACAD2022_DIR = 'C:\Program Files\Autodesk\AutoCAD 2022'
+dotnet build CADMCP.sln -c Release
 ```
 
-The server compiles TypeScript to `server/build/`. During development you can run it directly with `npx tsx server/src/index.ts`.
+本地发布：
 
-### Revit Plugin + Command Set
-
-Open `mcp-servers-for-revit.sln` in Visual Studio. The solution contains both the plugin and command set projects. Build configurations target Revit 2020-2026:
-
-- **Revit 2020-2024**: .NET Framework 4.8 (`Release R20` through `Release R24`)
-- **Revit 2025-2026**: .NET 8 (`Release R25`, `Release R26`)
-
-Building the solution automatically assembles the complete deployable layout in `plugin/bin/AddIn <year> <config>/` - the command set is copied into the plugin's `Commands/` folder as part of the build.
-
-## Project Structure
-
-```
-mcp-servers-for-revit/
-├── mcp-servers-for-revit.sln    # Combined solution (plugin + commandset + tests)
-├── command.json     # Command set manifest
-├── server/          # MCP server (TypeScript) - tools exposed to AI clients
-├── plugin/          # Revit add-in (C#) - WebSocket bridge inside Revit
-├── commandset/      # Command implementations (C#) - Revit API operations
-├── tests/           # Integration tests (C#) - TUnit tests against live Revit
-├── assets/          # Images for documentation
-├── .github/         # CI/CD workflows, contributing guide, code of conduct
-├── LICENSE
-└── README.md
+```powershell
+.\scripts\build-release.ps1 -Version 1.0.0
 ```
 
-## Releasing
+生成 `artifacts\CADMCP-1.0.0.bundle.zip`。npm 包位于 `server`，发布前应实时确认 `cadmcp-server` 名称可用。
 
-A single `v*` tag drives the entire release. The [release workflow](.github/workflows/release.yml) automatically:
+## 安装与使用
 
-- Builds the Revit plugin + command set for Revit 2020-2026
-- Creates a GitHub release with `mcp-servers-for-revit-vX.Y.Z-Revit<year>.zip` assets
-- Publishes the MCP server to npm as [`mcp-server-for-revit`](https://www.npmjs.com/package/mcp-server-for-revit)
+1. 将构建出的 `CADMCP.bundle` 放入 `%AppData%\Autodesk\ApplicationPlugins\`。
+2. 启动 AutoCAD 2022，在 `CADMCP` Ribbon 点击“开启服务”。服务状态不会跨启动持久化。
+3. MCP 客户端以 `npx cadmcp-server` 或本仓库的 `node server/build/index.js` 作为 stdio 服务命令。
 
-To create a release:
+插件 v1 未签名。若 AutoCAD 阻止加载，请根据组织安全策略配置 `SECURELOAD` 与 `TRUSTEDPATHS`，只信任实际 Bundle 目录，不要关闭全局安全检查。
 
-1. Run the bump script (updates `server/package.json`, `server/package-lock.json`, and `plugin/Properties/AssemblyInfo.cs`, then commits and tags):
-   ```powershell
-   ./scripts/release.ps1 -Version X.Y.Z
-   ```
+设置保存在 `%AppData%\CADMCP\settings.json`；日志和临时会话文件位于 `%LocalAppData%\CADMCP`。审计日志默认包含代码和参数并保留 30 天，可在设置中关闭源码/参数落盘。
 
-2. Push to trigger the workflow:
-   ```bash
-   git push origin main --tags
-   ```
+真实宿主验收见 [AutoCAD 2022 验收清单](docs/AUTOCAD_E2E_CHECKLIST.md)。
 
-> [!NOTE]
-> npm publish uses [trusted publishing](https://docs.npmjs.com/trusted-publishers/) via OIDC — no npm token is required. Provenance attestation is generated automatically.
+## 许可证
 
-## Acknowledgements
-
-This project is a fork of the work by the [mcp-servers-for-revit](https://github.com/mcp-servers-for-revit) team. The original repositories:
-
-- [revit-mcp](https://github.com/mcp-servers-for-revit/revit-mcp) - MCP server
-- [revit-mcp-plugin](https://github.com/mcp-servers-for-revit/revit-mcp-plugin) - Revit plugin
-- [revit-mcp-commandset](https://github.com/mcp-servers-for-revit/revit-mcp-commandset) - Command set
-
-Thank you to the original authors for creating the foundation that this project builds upon.
-
-## License
-
-[MIT](LICENSE)
+MIT
