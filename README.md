@@ -16,7 +16,7 @@ CADMCP 是一个面向个人受信本地环境的 AutoCAD 2022 插件。它通�
 MCP 客户端 ↔ stdio ↔ cadmcp-server ↔ 127.0.0.1 TCP/JSON-RPC ↔ CADMCP 插件 ↔ 当前 DWG
 ```
 
-TCP 使用 4 字节大端长度前缀和 UTF-8 JSON，单帧最大 8 MiB。插件每次手动开启服务时生成临时 256-bit 令牌并写入 `%LocalAppData%\CADMCP\runtime\session.json`；Node 会校验协议版本和 AutoCAD 进程是否仍存活。
+TCP 使用 4 字节大端长度前缀和 UTF-8 JSON，单帧最大 8 MiB。插件每次手动开启服务时生成临时 256-bit 令牌并写入 `%LocalAppData%\CADMCP\runtime\session.json`；Node 会校验协议版本、严格一致的产品版本和 AutoCAD 进程是否仍存活。Git SHA 仅作为构建诊断信息，不参与兼容性判定。
 
 ## MCP 工具
 
@@ -59,10 +59,25 @@ dotnet build CADMCP.sln -c Release
 本地发布：
 
 ```powershell
-.\scripts\build-release.ps1 -Version 1.0.0
+.\scripts\build-release.ps1
+# 可选测试文件名后缀，不改变包内产品版本
+.\scripts\build-release.ps1 -Label bugfix7
 ```
 
-生成 `artifacts\CADMCP-1.0.0.bundle.zip`。npm 包位于 `server`，发布前应实时确认 `cadmcp-server` 名称可用。
+脚本从根目录 `version.json` 读取产品版本，生成 `artifacts\CADMCP-<版本>.bundle.zip`。npm 包位于 `server`，发布前应实时确认 `cadmcp-server` 名称可用。
+
+## 版本管理
+
+`version.json` 是产品版本、TCP 协议版本和设置 Schema 的唯一人工维护来源。产品版本严格统一应用于插件、CommandSet、Bundle 和 npm Server；协议与设置 Schema 只在各自契约变化时独立提升。版本修改必须使用：
+
+```powershell
+.\scripts\set-version.ps1 -ProductVersion 2.1.0
+.\scripts\set-version.ps1 -ProtocolVersion 3
+.\scripts\set-version.ps1 -SettingsSchemaVersion 2
+.\scripts\test-version-consistency.ps1
+```
+
+两个 DLL 的程序集版本和文件版本跟随产品版本；信息版本及 Node 运行时标识采用 `<产品版本>+<12位Git SHA>`，有未提交修改时追加 `.dirty`。`PackageContents.xml` 的 `SchemaVersion="1.0"` 是 Autodesk Bundle 格式版本，不属于 CADMCP 产品版本。
 
 ## 安装与使用
 
@@ -70,7 +85,7 @@ dotnet build CADMCP.sln -c Release
 2. 启动 AutoCAD 2022，在 `CADMCP` Ribbon 点击“开启服务”。服务状态不会跨启动持久化。
 3. MCP 客户端以 `npx cadmcp-server` 或本仓库的 `node server/build/index.js` 作为 stdio 服务命令。
 
-插件 v1 未签名。若 AutoCAD 阻止加载，请根据组织安全策略配置 `SECURELOAD` 与 `TRUSTEDPATHS`，只信任实际 Bundle 目录，不要关闭全局安全检查。
+插件未签名。若 AutoCAD 阻止加载，请根据组织安全策略配置 `SECURELOAD` 与 `TRUSTEDPATHS`，只信任实际 Bundle 目录，不要关闭全局安全检查。
 
 设置保存在 `%AppData%\CADMCP\settings.json`；日志和临时会话文件位于 `%LocalAppData%\CADMCP`。审计日志默认包含代码和参数并保留 30 天，可在设置中关闭源码/参数落盘。
 

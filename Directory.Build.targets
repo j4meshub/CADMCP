@@ -1,0 +1,26 @@
+<Project>
+  <Target Name="GenerateCadMcpBuildVersion" BeforeTargets="CoreCompile">
+    <Exec Command="git -C &quot;$(MSBuildThisFileDirectory).&quot; rev-parse --short=12 HEAD"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_CadMcpGitShaLines" />
+    </Exec>
+    <Exec Command="git -C &quot;$(MSBuildThisFileDirectory).&quot; status --porcelain --untracked-files=normal"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_CadMcpGitStatusLines" />
+    </Exec>
+    <PropertyGroup>
+      <_CadMcpGitSha>@(_CadMcpGitShaLines)</_CadMcpGitSha>
+      <_CadMcpGitSha Condition="'$(_CadMcpGitSha)' == ''">unknown</_CadMcpGitSha>
+      <_CadMcpDirtySuffix Condition="'@(_CadMcpGitStatusLines)' != ''">.dirty</_CadMcpDirtySuffix>
+      <_CadMcpBuildVersion>$(Version)+$(_CadMcpGitSha)$(_CadMcpDirtySuffix)</_CadMcpBuildVersion>
+    </PropertyGroup>
+    <ItemGroup>
+      <_CadMcpAssemblyAttribute Include="System.Reflection.AssemblyInformationalVersionAttribute">
+        <_Parameter1>$(_CadMcpBuildVersion)</_Parameter1>
+      </_CadMcpAssemblyAttribute>
+    </ItemGroup>
+    <WriteCodeFragment Language="C#" OutputFile="$(IntermediateOutputPath)CADMCP.BuildVersion.g.cs" AssemblyAttributes="@(_CadMcpAssemblyAttribute)">
+      <Output TaskParameter="OutputFile" ItemName="Compile" />
+    </WriteCodeFragment>
+  </Target>
+</Project>

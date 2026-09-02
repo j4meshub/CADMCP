@@ -31,7 +31,9 @@ public sealed class StatusWindow : Window
         var warning = RuntimeMetrics.DynamicCompilationCount >= settings.DynamicAssemblyWarningThreshold
             ? "\n提醒：动态程序集已达到提醒阈值，建议在合适时重启 AutoCAD。" : string.Empty;
         _status.Text = $"服务：{(_isRunning() ? "已开启" : "已关闭")}\n" +
-            $"端口：{settings.Port}\n协议版本：1\n" +
+            $"产品版本：{CadMcpVersion.ProductVersion}\n" +
+            $"构建标识：{CadMcpVersion.BuildVersion}\n" +
+            $"端口：{settings.Port}\n协议版本：{CadMcpVersion.ProtocolVersion}\n设置 Schema：{CadMcpVersion.SettingsSchemaVersion}\n" +
             $"Roslyn：{(CompilerRuntimeStatus.IsReady ? "可用" : "不可用")} - {CompilerRuntimeStatus.Message}\n" +
             $"动态编译次数：{RuntimeMetrics.DynamicCompilationCount} / 提醒阈值 {settings.DynamicAssemblyWarningThreshold}\n" +
             $"AutoCAD 私有内存：{process.PrivateMemorySize64 / 1024 / 1024:N0} MiB\n" +

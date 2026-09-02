@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { PRODUCT_VERSION } from "../build/generated/build-info.js";
 
 const serverRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultServer = resolve(serverRoot, "build", "index.js");
@@ -49,7 +50,7 @@ async function main() {
   });
   transport.stderr?.on("data", chunk => process.stderr.write(chunk));
 
-  const client = new Client({ name: "cadmcp-codex-local-client", version: "1.0.0" });
+  const client = new Client({ name: "cadmcp-codex-local-client", version: PRODUCT_VERSION });
   try {
     await client.connect(transport);
     if (action === "list") {

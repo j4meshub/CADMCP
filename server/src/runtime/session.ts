@@ -1,13 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
+import { BUILD_VERSION, PRODUCT_VERSION, PROTOCOL_VERSION } from "../generated/build-info.js";
 
-export const PROTOCOL_VERSION = 1;
+export { BUILD_VERSION, PRODUCT_VERSION, PROTOCOL_VERSION };
 
 export interface SessionInfo {
   processId: number;
   port: number;
   token: string;
   protocolVersion: number;
+  productVersion: string;
+  buildVersion: string;
   startedAt: string;
 }
 
@@ -33,7 +36,10 @@ export function loadLiveSession(sessionPath = getSessionPath()): SessionInfo {
   }
   if (!isSessionInfo(parsed)) throw new SessionError("invalid_session", "session.json 格式无效");
   if (parsed.protocolVersion !== PROTOCOL_VERSION) {
-    throw new SessionError("protocol_mismatch", `协议版本不匹配: ${parsed.protocolVersion}`);
+    throw new SessionError("protocol_mismatch", `协议版本不匹配: 插件 ${parsed.protocolVersion}，Server ${PROTOCOL_VERSION}`);
+  }
+  if (parsed.productVersion !== PRODUCT_VERSION) {
+    throw new SessionError("version_mismatch", `产品版本不匹配: 插件 ${parsed.productVersion}，Server ${PRODUCT_VERSION}`);
   }
   if (!isProcessAlive(parsed.processId)) {
     throw new SessionError("stale_session", `AutoCAD 进程 ${parsed.processId} 已不存在`);
@@ -47,7 +53,8 @@ function isSessionInfo(value: unknown): value is SessionInfo {
   return Number.isInteger(v.processId) && Number.isInteger(v.port) &&
     (v.port as number) >= 1024 && (v.port as number) <= 65535 &&
     typeof v.token === "string" && (v.token as string).length >= 43 &&
-    Number.isInteger(v.protocolVersion) && typeof v.startedAt === "string";
+    Number.isInteger(v.protocolVersion) && typeof v.productVersion === "string" &&
+    typeof v.buildVersion === "string" && typeof v.startedAt === "string";
 }
 
 function isProcessAlive(pid: number): boolean {

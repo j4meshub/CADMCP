@@ -1,7 +1,7 @@
 import net from "node:net";
 import crypto from "node:crypto";
 import { FrameDecoder, encodeFrame } from "../protocol/framing.js";
-import { loadLiveSession, PROTOCOL_VERSION, SessionError } from "./session.js";
+import { BUILD_VERSION, loadLiveSession, PRODUCT_VERSION, PROTOCOL_VERSION, SessionError } from "./session.js";
 
 export interface InvokeOptions { timeoutMs?: number; bypassSlot?: boolean }
 
@@ -46,14 +46,28 @@ function invokeOnce(method: string, params: Record<string, unknown>, timeoutMs: 
       error ? reject(error) : resolve(value);
     };
     const timer = setTimeout(() => finish(new CadRpcError("timeout_unknown", "CAD 调用已超过等待时限，执行结果未知", { callId })), timeoutMs);
-    socket.once("connect", () => socket.write(encodeFrame({ type: "authenticate", protocolVersion: PROTOCOL_VERSION, token: session.token })));
+    socket.once("connect", () => socket.write(encodeFrame({
+      type: "authenticate",
+      protocolVersion: PROTOCOL_VERSION,
+      productVersion: PRODUCT_VERSION,
+      buildVersion: BUILD_VERSION,
+      token: session.token
+    })));
     socket.on("data", (chunk) => {
       try {
         for (const message of decoder.push(chunk)) {
           const value = message as Record<string, unknown>;
           if (!authenticated) {
             if (value.type !== "authenticated" || value.success !== true) {
-              finish(new CadRpcError("authentication_failed", String(value.message ?? "认证失败")));
+              finish(new CadRpcError(String(value.errorCode ?? "authentication_failed"), String(value.message ?? "认证失败"), value));
+              return;
+            }
+            if (value.protocolVersion !== PROTOCOL_VERSION) {
+              finish(new CadRpcError("protocol_mismatch", `协议版本不匹配: 插件 ${String(value.protocolVersion)}，Server ${PROTOCOL_VERSION}`, value));
+              return;
+            }
+            if (value.productVersion !== PRODUCT_VERSION) {
+              finish(new CadRpcError("version_mismatch", `产品版本不匹配: 插件 ${String(value.productVersion)}，Server ${PRODUCT_VERSION}`, value));
               return;
             }
             authenticated = true;

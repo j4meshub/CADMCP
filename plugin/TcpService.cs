@@ -54,9 +54,9 @@ public sealed class TcpService : IDisposable
             try
             {
                 var auth = await FrameProtocol.ReadAsync(stream, token).ConfigureAwait(false);
-                var valid = auth?.Value<string>("type") == "authenticate" && auth.Value<int?>("protocolVersion") == 1 && FixedEquals(auth.Value<string>("token"), _token);
-                await FrameProtocol.WriteAsync(stream, new JObject { ["type"] = "authenticated", ["success"] = valid, ["message"] = valid ? null : "认证失败" }, token).ConfigureAwait(false);
-                if (!valid) return;
+                var authResponse = Authenticate(auth);
+                await FrameProtocol.WriteAsync(stream, authResponse, token).ConfigureAwait(false);
+                if (authResponse.Value<bool>("success") == false) return;
                 while (!token.IsCancellationRequested)
                 {
                     var request = await FrameProtocol.ReadAsync(stream, token).ConfigureAwait(false); if (request == null) return;
@@ -81,8 +81,53 @@ public sealed class TcpService : IDisposable
     private void WriteSession()
     {
         Directory.CreateDirectory(RuntimePaths.RuntimeDirectory);
-        var session = new JObject { ["processId"] = Process.GetCurrentProcess().Id, ["port"] = Port, ["token"] = _token, ["protocolVersion"] = 1, ["startedAt"] = DateTimeOffset.Now };
+        var session = new JObject
+        {
+            ["processId"] = Process.GetCurrentProcess().Id,
+            ["port"] = Port,
+            ["token"] = _token,
+            ["protocolVersion"] = CadMcpVersion.ProtocolVersion,
+            ["productVersion"] = CadMcpVersion.ProductVersion,
+            ["buildVersion"] = CadMcpVersion.BuildVersion,
+            ["startedAt"] = DateTimeOffset.Now
+        };
         File.WriteAllText(RuntimePaths.SessionFile, session.ToString(Formatting.Indented)); RestrictSessionFile();
+    }
+    private JObject Authenticate(JObject? auth)
+    {
+        var response = new JObject
+        {
+            ["type"] = "authenticated",
+            ["success"] = false
+        };
+        if (auth?.Value<string>("type") != "authenticate" || !FixedEquals(auth.Value<string>("token"), _token))
+        {
+            response["errorCode"] = "authentication_failed";
+            response["message"] = "认证失败";
+            return response;
+        }
+
+        response["protocolVersion"] = CadMcpVersion.ProtocolVersion;
+        response["productVersion"] = CadMcpVersion.ProductVersion;
+        response["buildVersion"] = CadMcpVersion.BuildVersion;
+        var clientProtocol = auth.Value<int?>("protocolVersion");
+        if (clientProtocol != CadMcpVersion.ProtocolVersion)
+        {
+            response["errorCode"] = "protocol_mismatch";
+            response["message"] = $"协议版本不匹配: 插件 {CadMcpVersion.ProtocolVersion}，Server {clientProtocol?.ToString() ?? "缺失"}";
+            return response;
+        }
+        var clientProduct = auth.Value<string>("productVersion");
+        if (!string.Equals(clientProduct, CadMcpVersion.ProductVersion, StringComparison.Ordinal))
+        {
+            response["errorCode"] = "version_mismatch";
+            response["message"] = $"产品版本不匹配: 插件 {CadMcpVersion.ProductVersion}，Server {clientProduct ?? "缺失"}";
+            return response;
+        }
+
+        response["success"] = true;
+        response["message"] = null;
+        return response;
     }
     private static void RestrictSessionFile()
     {

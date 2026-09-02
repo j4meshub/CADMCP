@@ -8,7 +8,7 @@ namespace CADMCP.Plugin;
 
 public sealed class CadMcpSettings
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = CadMcpVersion.SettingsSchemaVersion;
     public static readonly string[] ToolNames = { "say_hello", "get_current_document_info", "get_selected_entities", "query_entities", "send_code_to_cad", "get_execution_status", "create_line", "create_polyline", "create_circle", "create_text" };
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public int Port { get; set; } = 8080;

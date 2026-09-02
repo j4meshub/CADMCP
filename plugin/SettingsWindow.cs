@@ -33,7 +33,7 @@ public sealed class SettingsWindow : Window
     private UIElement LogPage() { _logCode.Content = "记录完整代码和参数（默认开启）"; _logCode.IsChecked = Result.LogSourceAndParameters; _retention.Text = Result.LogRetentionDays.ToString(); var panel = Stack(); panel.Children.Add(_logCode); AddRow(panel, "日志保留天数", _retention); return panel; }
     private UIElement AboutPage()
     {
-        var panel = Stack(); panel.Children.Add(new TextBlock { Text = "CADMCP v1.0.0\nAutoCAD 2022 / .NET Framework 4.8\n\n风险提示：send_code_to_cad 动态代码与插件具有相同的文件、网络、进程和 AutoCAD API 完整权限。仅在个人受信本地环境使用。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4) });
+        var panel = Stack(); panel.Children.Add(new TextBlock { Text = $"CADMCP {CadMcpVersion.BuildVersion}\n协议版本 {CadMcpVersion.ProtocolVersion} / 设置 Schema {CadMcpVersion.SettingsSchemaVersion}\nAutoCAD 2022 / .NET Framework 4.8\n\n风险提示：send_code_to_cad 动态代码与插件具有相同的文件、网络、进程和 AutoCAD API 完整权限。仅在个人受信本地环境使用。", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4) });
         foreach (var item in new[] { ("打开插件目录", RuntimePaths.PluginDirectory), ("打开设置目录", RuntimePaths.SettingsDirectory), ("打开日志目录", RuntimePaths.LogDirectory) }) { var button = new Button { Content = item.Item1, Margin = new Thickness(4), Width = 140 }; button.Click += (_, __) => Open(item.Item2); panel.Children.Add(button); } return panel;
     }
     private void Save(object sender, RoutedEventArgs e)
