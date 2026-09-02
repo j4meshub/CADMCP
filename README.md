@@ -20,11 +20,13 @@ TCP 使用 4 字节大端长度前缀和 UTF-8 JSON，单帧最大 8 MiB。插�
 
 ## MCP 工具
 
-`say_hello`、`get_current_document_info`、`get_selected_entities`、`query_entities`、`send_code_to_cad`、`get_execution_status`、`create_line`、`create_polyline`、`create_circle`、`create_text`。
+`say_hello`、`get_current_document_info`、`get_selected_entities`、`query_entities`、`get_entity_details`、`set_selection`、`send_code_to_cad`、`get_execution_status`、`create_line`、`create_polyline`、`create_circle`、`create_text`，共 12 个工具。
 
 全部工具默认启用，可在 Ribbon 的“设置”中逐项关闭。禁用项仍在 MCP 工具列表中，调用时返回 `tool_disabled`。
 
 固定绘图工具的坐标和长度以毫米输入，支持 `ucs`（默认）和 `wcs`。批量 `items` 在单一事务中原子创建；指定的图层或线型不存在时整批失败，不隐式创建资源。
+
+`get_entity_details` 按句柄读取几何、块属性和样式；`set_selection` 支持替换、追加、移除和清空预选集，不修改 DWG 实体。两个新工具均要求传入最近读取结果的 `documentToken`、`activeSpaceHandle`，防止切换图纸或空间后误用句柄。详见 [第一批工具说明](docs/FIRST_BATCH_TOOLS.md)。
 
 ## 动态 C#
 
@@ -54,6 +56,8 @@ npm test
 cd ..
 $env:ACAD2022_DIR = 'C:\Program Files\Autodesk\AutoCAD 2022'
 dotnet build CADMCP.sln -c Release
+# 不需要 AutoCAD 的纯规则与设置迁移测试（.NET 8）
+dotnet run --project tests/CADMCP.Core.Tests -c Release
 ```
 
 本地发布：

@@ -29,9 +29,9 @@ public sealed class CurrentDocumentInfoCommand : ICadCommand
         {
             var layer = (LayerTableRecord)tr.GetObject(db.Clayer, OpenMode.ForRead); var currentSpace = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
             var count = currentSpace.Cast<ObjectId>().Count();
-            return ExecutionResponses.Success(context.CallId, new JObject { ["name"] = context.Document.Name, ["fileName"] = db.Filename, ["isModified"] = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("DBMOD")) != 0,
+            return ExecutionResponses.Success(context.CallId, context.WithIdentity(new JObject { ["name"] = context.Document.Name, ["fileName"] = db.Filename, ["isModified"] = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("DBMOD")) != 0,
                 ["activeSpace"] = db.TileMode ? "model" : "paper", ["activeSpaceHandle"] = db.CurrentSpaceId.Handle.ToString(), ["insunits"] = db.Insunits.ToString(), ["externalUnit"] = units.ExternalUnit,
-                ["currentLayer"] = layer.Name, ["entityCount"] = count, ["coordinateSystemDefault"] = "ucs" });
+                ["currentLayer"] = layer.Name, ["entityCount"] = count, ["coordinateSystemDefault"] = "ucs" }));
         }
     }
 }
@@ -46,7 +46,7 @@ public sealed class SelectedEntitiesCommand : ICadCommand
         {
             using (var tr = context.Document.Database.TransactionManager.StartOpenCloseTransaction()) { var units = new CadUnits(context.Document.Database, context.Settings); foreach (var id in ids.Take(limit)) if (tr.GetObject(id, OpenMode.ForRead, false) is Entity entity) result.Add(EntitySerialization.Summary(entity, units, include)); }
         }
-        return ExecutionResponses.Success(context.CallId, new JObject { ["items"] = result, ["count"] = result.Count, ["truncated"] = ids.Count > limit });
+        return ExecutionResponses.Success(context.CallId, context.WithIdentity(new JObject { ["items"] = result, ["count"] = result.Count, ["truncated"] = ids.Count > limit }));
     }
 }
 
@@ -67,7 +67,7 @@ public sealed class QueryEntitiesCommand : ICadCommand
                 matched++; if (items.Count < limit) items.Add(EntitySerialization.Summary(entity, units, include));
             }
         }
-        return ExecutionResponses.Success(context.CallId, new JObject { ["items"] = items, ["count"] = items.Count, ["matched"] = matched, ["limit"] = limit, ["truncated"] = matched > limit, ["activeSpaceOnly"] = true });
+        return ExecutionResponses.Success(context.CallId, context.WithIdentity(new JObject { ["items"] = items, ["count"] = items.Count, ["matched"] = matched, ["limit"] = limit, ["truncated"] = matched > limit, ["activeSpaceOnly"] = true }));
     }
     private static HashSet<string> Set(JToken? token) => new((token?.Values<string>() ?? Enumerable.Empty<string?>()).Where(x => x != null).Select(x => x!), StringComparer.OrdinalIgnoreCase);
     private static bool Matches(Entity entity, HashSet<string> types, HashSet<string> layers, HashSet<string> linetypes, JObject? color)

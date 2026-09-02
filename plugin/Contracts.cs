@@ -23,6 +23,15 @@ public sealed class CadCommandContext
     public string CallId { get; }
     public IReadOnlyList<ObjectId> InitialSelectionObjectIds { get; }
     public IReadOnlyList<string> InitialSelectionHandles { get; }
+    public string DocumentToken => DocumentIdentity.GetToken(Document);
+    public JObject WithIdentity(JObject value)
+    {
+        value["documentToken"] = DocumentToken;
+        value["activeSpaceHandle"] = Document.Database.CurrentSpaceId.Handle.ToString();
+        return value;
+    }
+    public IReadOnlyList<ObjectId>? RequestedSelection { get; private set; }
+    public void RequestSelection(IReadOnlyList<ObjectId> ids) => RequestedSelection = new List<ObjectId>(ids);
 }
 
 public static class CompilerRuntimeStatus

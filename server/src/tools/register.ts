@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { errorResult, invokeCad } from "../runtime/cad-client.js";
+import { CadRpcError, errorResult, invokeCad } from "../runtime/cad-client.js";
+import { getEntityDetailsSchema, setSelectionInputSchema, setSelectionSchema } from "./entity-schemas.js";
 
 const point = z.object({ x: z.number(), y: z.number(), z: z.number().optional().default(0) });
 const coordinateSystem = z.enum(["ucs", "wcs"]).optional().default("ucs");
@@ -20,6 +21,20 @@ function handler(method: string, options: { timeoutMs?: number; bypassSlot?: boo
 }
 
 export function registerTools(server: McpServer) {
+  server.registerTool("get_entity_details", {
+    description: "按句柄读取当前空间实体详情，坐标 WCS、长度毫米；不修改 DWG / Read entity details in WCS/mm; requires document identity",
+    inputSchema: getEntityDetailsSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  }, handler("get_entity_details"));
+  server.registerTool("set_selection", {
+    description: "精确设置预选集；先验证全部目标，失败保留原选择；不修改实体 / Set implied selection atomically; no DWG edits",
+    inputSchema: setSelectionInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  }, async params => {
+    const parsed = setSelectionSchema.safeParse(params);
+    if (!parsed.success) return { ...result(errorResult(new CadRpcError("invalid_parameters", parsed.error.message))), isError: true };
+    return handler("set_selection")(parsed.data);
+  });
   server.tool("say_hello", "向当前 AutoCAD 文档问好 / Say hello in the active drawing", { message: z.string().optional() }, handler("say_hello"));
   server.tool("get_current_document_info", "获取当前 DWG 与活动空间信息 / Get active DWG information", {}, handler("get_current_document_info"));
   server.tool("get_selected_entities", "读取当前预选实体 / Get implied-selection entities", { limit: z.number().int().min(1).max(2000).optional().default(200), includeGeometry: z.boolean().optional().default(false) }, handler("get_selected_entities"));
