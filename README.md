@@ -44,7 +44,7 @@ Node 最长等待 5 分钟。超时不会强杀 AutoCAD 线程，而会返回 `t
 
 ## 构建
 
-要求 Node.js 20+、.NET SDK，以及本机 AutoCAD 2022。默认从 `C:\Program Files\Autodesk\AutoCAD 2022` 引用 `AcCoreMgd.dll`、`AcDbMgd.dll`、`AcMgd.dll`；也可设置 `ACAD2022_DIR`。这些宿主程序集均不复制到 Bundle。
+要求 Node.js 24+、.NET SDK，以及本机 AutoCAD 2022。默认从 `C:\Program Files\Autodesk\AutoCAD 2022` 引用 `AcCoreMgd.dll`、`AcDbMgd.dll`、`AcMgd.dll`；也可设置 `ACAD2022_DIR`。这些宿主程序集均不复制到 Bundle。
 
 ```powershell
 cd server
