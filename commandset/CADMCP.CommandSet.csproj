@@ -29,7 +29,7 @@
     <RemoveDir Directories="$(CommandDir)" />
     <MakeDir Directories="$(CommandDir)" />
     <Copy SourceFiles="@(CommandSetOutputFiles)" DestinationFolder="$(CommandDir)\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'%(Filename)%(Extension)' != 'Newtonsoft.Json.dll' and '%(Filename)%(Extension)' != 'CADMCP.Plugin.dll' and '%(Filename)%(Extension)' != 'CADMCP.Plugin.pdb'" />
-    <Copy SourceFiles="$(NuGetPackageRoot)system.runtime.compilerservices.unsafe\4.5.3\lib\net461\System.Runtime.CompilerServices.Unsafe.dll" DestinationFiles="$(CommandDir)\System.Runtime.CompilerServices.Unsafe.4.0.4.1.dll" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$([System.IO.Path]::Combine('$(NuGetPackageRoot)', 'system.runtime.compilerservices.unsafe/4.5.3/lib/net461/System.Runtime.CompilerServices.Unsafe.dll'))" DestinationFiles="$(CommandDir)\System.Runtime.CompilerServices.Unsafe.4.0.4.1.dll" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\..\plugin\bin\$(Configuration)\net48\CADMCP.Plugin.dll;$(MSBuildProjectDirectory)\..\plugin\bin\$(Configuration)\net48\Newtonsoft.Json.dll" DestinationFolder="$(BundleContents)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\..\bundle\PackageContents.xml" DestinationFolder="$(BundleDir)" SkipUnchangedFiles="true" />
   </Target>

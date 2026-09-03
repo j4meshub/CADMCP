@@ -17,5 +17,5 @@ jobs:
         working-directory: server
       - run: npm pack --dry-run
         working-directory: server
-      - name: 无 AutoCAD 依赖的选择规则与设置测试
+      - name: 无 AutoCAD 依赖的核心规则与执行策略测试
         run: dotnet run --project tests/CADMCP.Core.Tests -c Release

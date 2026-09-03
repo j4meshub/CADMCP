@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { CadRpcError, errorResult, invokeCad } from "../runtime/cad-client.js";
 import { getEntityDetailsSchema, setSelectionInputSchema, setSelectionSchema } from "./entity-schemas.js";
+import { cloneEntitiesSchema, transformEntitiesInputSchema, transformEntitiesSchema } from "./modify-schemas.js";
 
 const point = z.object({ x: z.number(), y: z.number(), z: z.number().optional().default(0) });
 const coordinateSystem = z.enum(["ucs", "wcs"]).optional().default("ucs");
@@ -21,6 +22,20 @@ function handler(method: string, options: { timeoutMs?: number; bypassSlot?: boo
 }
 
 export function registerTools(server: McpServer) {
+  server.registerTool("clone_entities", {
+    description: "同空间原样复制并位移（毫米），整批事务；默认执行，可 dryRun 预览 / Atomic clone in current space; mm, optional preview",
+    inputSchema: cloneEntitiesSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+  }, handler("clone_entities"));
+  server.registerTool("transform_entities", {
+    description: "原地移动/旋转/等比缩放/镜像；毫米/弧度；文字沿用 CAD 当前 MIRRTEXT / Atomic transform; mm/radians; native text mirroring with current MIRRTEXT",
+    inputSchema: transformEntitiesInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+  }, async params => {
+    const parsed = transformEntitiesSchema.safeParse(params);
+    if (!parsed.success) return { ...result(errorResult(new CadRpcError("invalid_parameters", parsed.error.message))), isError: true };
+    return handler("transform_entities")(parsed.data);
+  });
   server.registerTool("get_entity_details", {
     description: "按句柄读取当前空间实体详情，坐标 WCS、长度毫米；不修改 DWG / Read entity details in WCS/mm; requires document identity",
     inputSchema: getEntityDetailsSchema,
@@ -42,20 +57,20 @@ export function registerTools(server: McpServer) {
     entityTypes: z.array(z.string()).optional(), layers: z.array(z.string()).optional(), linetypes: z.array(z.string()).optional(), color: color.optional(),
     boundingBox: z.object({ min: point, max: point }).optional(), coordinateSystem, limit: z.number().int().min(1).max(2000).optional().default(200), includeGeometry: z.boolean().optional().default(false)
   }, handler("query_entities"));
-  server.tool("send_code_to_cad", "在 AutoCAD 进程内动态编译并执行 C# / Compile and execute C# inside AutoCAD", {
+  server.tool("send_code_to_cad", "完整权限动态执行 C#；auto 提供事务，none 自管；不保证严格撤销，undoGuaranteed=false 不代表不能撤销 / Full-trust C#; auto transaction or none; best-effort undo, never guaranteed", {
     code: z.string().min(1), parameters: z.record(z.unknown()).optional().default({}), transactionMode: z.enum(["auto", "none"]).optional().default("auto"), usings: z.array(z.string()).optional(), references: z.array(z.string()).optional()
   }, handler("send_code_to_cad", { timeoutMs: 300_000 }));
   server.tool("get_execution_status", "查询超时调用的最终状态 / Poll a timed-out CAD call", { callId: z.string().uuid() }, handler("get_execution_status", { timeoutMs: 10_000, bypassSlot: true }));
-  server.tool("create_line", "原子批量创建直线 / Atomically create lines", {
+  server.tool("create_line", "原子批量创建直线；一次撤销，需完整 UNDO / Atomic lines; one undo unit, requires full UNDO", {
     items: z.array(z.object({ start: point, end: point, ...properties })).min(1), coordinateSystem
   }, handler("create_line"));
-  server.tool("create_polyline", "原子批量创建二维轻量多段线 / Atomically create 2D lightweight polylines", {
+  server.tool("create_polyline", "原子批量创建二维轻量多段线；一次撤销，需完整 UNDO / Atomic 2D polylines; one undo unit, requires full UNDO", {
     items: z.array(z.object({ vertices: z.array(z.object({ x: z.number(), y: z.number(), bulge: z.number().optional().default(0) })).min(2), closed: z.boolean().optional().default(false), ...properties })).min(1), coordinateSystem
   }, handler("create_polyline"));
-  server.tool("create_circle", "原子批量创建圆 / Atomically create circles", {
+  server.tool("create_circle", "原子批量创建圆；一次撤销，需完整 UNDO / Atomic circles; one undo unit, requires full UNDO", {
     items: z.array(z.object({ center: point, radius: z.number().positive(), ...properties })).min(1), coordinateSystem
   }, handler("create_circle"));
-  server.tool("create_text", "原子批量创建 MText / Atomically create MText", {
+  server.tool("create_text", "原子批量创建 MText；一次撤销，需完整 UNDO / Atomic MText; one undo unit, requires full UNDO", {
     items: z.array(z.object({ content: z.string(), position: point, height: z.number().positive(), width: z.number().nonnegative().optional().default(0), rotation: z.number().optional().default(0), attachment: z.enum(["topLeft", "topCenter", "topRight", "middleLeft", "middleCenter", "middleRight", "bottomLeft", "bottomCenter", "bottomRight"]).optional().default("topLeft"), ...properties })).min(1), coordinateSystem
   }, handler("create_text"));
 }

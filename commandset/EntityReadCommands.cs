@@ -72,6 +72,7 @@ internal static class EntityTargetResolver
 public sealed class GetEntityDetailsCommand : ICadCommand
 {
     public string Name => "get_entity_details";
+    public CadExecutionKind ExecutionKind => CadExecutionKind.ReadOnly;
     public JObject Execute(CadCommandContext context, JObject parameters)
     {
         var watch = Stopwatch.StartNew();
@@ -83,7 +84,7 @@ public sealed class GetEntityDetailsCommand : ICadCommand
         var items = new JArray();
         // Leave ample room for the execution and JSON-RPC envelopes within the 8 MiB frame.
         var bytes = 0;
-        using (context.Document.LockDocument())
+        // Dispatcher owns the application-context read lock; no nested default/write lock.
         using (var tr = context.Document.Database.TransactionManager.StartOpenCloseTransaction())
         {
             var entities = EntityTargetResolver.Resolve(context.Document.Database, tr, handles);
@@ -107,6 +108,7 @@ public sealed class GetEntityDetailsCommand : ICadCommand
 public sealed class SetSelectionCommand : ICadCommand
 {
     public string Name => "set_selection";
+    public CadExecutionKind ExecutionKind => CadExecutionKind.Selection;
     public JObject Execute(CadCommandContext context, JObject parameters)
     {
         var watch = Stopwatch.StartNew();
@@ -125,7 +127,7 @@ public sealed class SetSelectionCommand : ICadCommand
         }
         var previous = context.InitialSelectionHandles.ToArray();
         var selected = EntitySelectionRules.Select(mode, previous, targets, expected);
-        using (context.Document.LockDocument())
+        // Resolve only; dispatcher applies the intent after releasing the read lock.
         using (var tr = context.Document.Database.TransactionManager.StartOpenCloseTransaction())
         {
             // Validate even remove targets that are not currently selected.

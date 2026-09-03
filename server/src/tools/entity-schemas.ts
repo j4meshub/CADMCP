@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const handle = z.string().regex(/^[0-9a-fA-F]{1,16}$/).refine(value => /[1-9a-fA-F]/.test(value), "Handle must be nonzero");
-const identity = {
+export const identity = {
   documentToken: z.string().uuid().describe("最近读取结果的文档标识 / Token from current document, selection or query result"),
   activeSpaceHandle: handle.describe("最近读取结果的活动空间句柄 / Active-space handle from the same result")
 };

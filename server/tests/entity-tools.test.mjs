@@ -60,8 +60,20 @@ test("真实 MCP 注册、Schema 拒绝、默认参数转发、工具禁用与�
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   try {
     await server.connect(serverTransport); await client.connect(clientTransport);
-    const list = await client.listTools(); assert.equal(list.tools.length, 12);
-    for (const name of ["get_entity_details", "set_selection"]) {
+    const list = await client.listTools(); assert.equal(list.tools.length, 14);
+    const mirrorDescription = list.tools.find(tool => tool.name === "transform_entities").description;
+    assert.match(mirrorDescription, /MIRRTEXT/);
+    assert.doesNotMatch(mirrorDescription, /严格几何镜像/);
+    const dynamicTool = list.tools.find(tool => tool.name === "send_code_to_cad");
+    assert.match(dynamicTool.description, /best-effort undo/);
+    assert.equal(dynamicTool.inputSchema.properties.transactionMode.default, "auto");
+    assert.deepEqual(dynamicTool.inputSchema.properties.transactionMode.enum, ["auto", "none"]);
+    for (const name of ["create_line", "create_circle", "create_polyline", "create_text"]) {
+      const tool = list.tools.find(tool => tool.name === name);
+      assert.match(tool.description, /requires full UNDO/);
+      assert.equal(tool.inputSchema.properties.dryRun, undefined);
+    }
+    for (const name of ["get_entity_details", "set_selection", "clone_entities", "transform_entities"]) {
       const schema = list.tools.find(tool => tool.name === name).inputSchema;
       assert.ok(schema.required.includes("documentToken")); assert.ok(schema.required.includes("activeSpaceHandle"));
     }
@@ -72,7 +84,22 @@ test("真实 MCP 注册、Schema 拒绝、默认参数转发、工具禁用与�
     assert.equal(received[0].params.includeAttributes, true); assert.equal(received[0].method, "get_entity_details");
     assert.equal(received[0].params.documentToken, identity.documentToken);
     assert.match(received[0].params.callId, /^[a-f0-9-]{36}$/);
-    for (const code of ["tool_disabled", "document_mismatch", "active_space_mismatch", "count_mismatch", "entity_not_found", "cad_busy"]) {
+    for (const name of ["clone_entities", "transform_entities"]) {
+      const schema = list.tools.find(tool => tool.name === name).inputSchema;
+      assert.ok(schema.required.includes("source")); assert.ok(schema.required.includes("expectedCount"));
+      assert.equal(schema.properties.source.oneOf?.length ?? schema.properties.source.anyOf?.length, 2);
+    }
+    const cloneArgs = { ...identity, source: { kind: "selection" }, expectedCount: 2, displacement: { x: 10, y: 20 } };
+    const clone = await client.callTool({ name: "clone_entities", arguments: cloneArgs });
+    assert.equal(JSON.parse(clone.content[0].text).success, true);
+    assert.equal(received.at(-1).params.dryRun, false); assert.equal(received.at(-1).params.selectCreated, false);
+    assert.equal(received.at(-1).params.coordinateSystem, "ucs"); assert.equal(received.at(-1).params.displacement.z, 0);
+    const n = received.length;
+    const badMirror = await client.callTool({ name: "transform_entities", arguments: { ...identity, source: { kind: "selection" }, expectedCount: 2, operation: { type: "mirror", axisStart: {x:0,y:0}, axisEnd: {x:0,y:0} } } });
+    assert.equal(badMirror.isError, true); assert.equal(received.length, n);
+    const move = await client.callTool({ name: "transform_entities", arguments: { ...identity, source: { kind: "handles", handles: ["A"] }, expectedCount: 1, operation: { type: "move", displacement: {x:1,y:2} }, dryRun: true } });
+    assert.equal(JSON.parse(move.content[0].text).success, true); assert.equal(received.at(-1).params.dryRun, true);
+    for (const code of ["tool_disabled", "document_mismatch", "active_space_mismatch", "count_mismatch", "entity_not_found", "cad_busy", "undo_unavailable"]) {
       errorCode = code;
       const response = await client.callTool({ name: "set_selection", arguments: { ...identity, mode: "clear", expectedCount: 0 } });
       assert.equal(JSON.parse(response.content[0].text).errorCode, code);

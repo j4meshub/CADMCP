@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);UNDO_CANDIDATE</DefineConstants>
+    <AutoCadDir Condition="'$(ACAD2022_DIR)' != ''">$(ACAD2022_DIR)</AutoCadDir>
+    <AutoCadDir Condition="'$(AutoCadDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2022</AutoCadDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../CADMCP.Undo.Probes/UndoIsolation.cs" Link="UndoIsolation.cs" />
+    <Compile Include="../../commandset/ModifyCommands.cs" Link="ModifyCommands.cs" />
+    <Compile Include="../../commandset/ModifyRequest.cs" Link="ModifyRequest.cs" />
+    <Compile Include="../../commandset/ModifyTargetGuard.cs" Link="ModifyTargetGuard.cs" />
+    <Compile Include="../../commandset/TransformMath.cs" Link="TransformMath.cs" />
+    <Compile Include="../../commandset/EntityReadCommands.cs" Link="EntityReadCommands.cs" />
+    <Compile Include="../../commandset/EntitySerialization.cs" Link="EntitySerialization.cs" />
+    <Compile Include="../../commandset/EntityDetails.cs" Link="EntityDetails.cs" />
+    <Compile Include="../../commandset/UnitsAndGeometry.cs" Link="UnitsAndGeometry.cs" />
+    <Reference Include="Microsoft.CSharp" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <Reference Include="CADMCP.Plugin"><HintPath>../../plugin/bin/Release/net48/CADMCP.Plugin.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcCoreMgd"><HintPath>$(AutoCadDir)\AcCoreMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcDbMgd"><HintPath>$(AutoCadDir)\AcDbMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcMgd"><HintPath>$(AutoCadDir)\AcMgd.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

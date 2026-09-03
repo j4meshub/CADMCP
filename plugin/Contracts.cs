@@ -10,14 +10,29 @@ namespace CADMCP.Plugin;
 public interface ICadCommand
 {
     string Name { get; }
+    // Mandatory classification: new commands cannot silently inherit the read-only path.
+    CadExecutionKind ExecutionKind { get; }
     JObject Execute(CadCommandContext context, JObject parameters);
 }
 
 public sealed class CadCommandContext
 {
+    private readonly NativeCommandUndoScope? _nativeUndo;
     public CadCommandContext(Document document, CadMcpSettings settings, string callId,
         IReadOnlyList<ObjectId> initialSelectionObjectIds, IReadOnlyList<string> initialSelectionHandles)
-    { Document = document; Settings = settings; CallId = callId; InitialSelectionObjectIds = initialSelectionObjectIds; InitialSelectionHandles = initialSelectionHandles; }
+        : this(document, settings, callId, initialSelectionObjectIds, initialSelectionHandles, null) { }
+    internal CadCommandContext(Document document, CadMcpSettings settings, string callId,
+        IReadOnlyList<ObjectId> initialSelectionObjectIds, IReadOnlyList<string> initialSelectionHandles,
+        NativeCommandUndoScope? nativeUndo)
+    { Document = document; Settings = settings; CallId = callId; InitialSelectionObjectIds = initialSelectionObjectIds; InitialSelectionHandles = initialSelectionHandles; _nativeUndo = nativeUndo; }
+    // The public constructor deliberately grants no fixed-write undo capability.
+    // Internal commands must be dispatched, not called from an arbitrary command/worker.
+    public void RequireNativeUndoBoundary()
+    {
+        if (_nativeUndo == null)
+            throw new CadCommandException("undo_unavailable", "缺少调度器创建的固定写入撤销边界");
+        _nativeUndo.Require(Document);
+    }
     public Document Document { get; }
     public CadMcpSettings Settings { get; }
     public string CallId { get; }

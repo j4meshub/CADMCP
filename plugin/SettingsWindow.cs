@@ -30,6 +30,8 @@ public sealed class SettingsWindow : Window
         var descriptions = new Dictionary<string, string> { ["say_hello"]="测试连接", ["get_current_document_info"]="当前 DWG 信息", ["get_selected_entities"]="读取预选实体", ["query_entities"]="查询活动空间实体", ["send_code_to_cad"]="动态编译执行 C#（完整权限）", ["get_execution_status"]="查询超时调用状态", ["create_line"]="批量创建直线", ["create_polyline"]="批量创建二维多段线", ["create_circle"]="批量创建圆", ["create_text"]="批量创建 MText" };
         descriptions["get_entity_details"] = "按句柄读取实体详情";
         descriptions["set_selection"] = "精确设置当前选择集（不修改图形）";
+        descriptions["clone_entities"] = "原样复制实体（支持只读预览）";
+        descriptions["transform_entities"] = "移动、旋转、等比缩放、几何镜像";
         var panel = Stack(); foreach (var name in CadMcpSettings.ToolNames) { var box = new CheckBox { Content = name + " — " + descriptions[name], IsChecked = Result.IsEnabled(name), Margin = new Thickness(4) }; _tools[name] = box; panel.Children.Add(box); } return new ScrollViewer { Content = panel };
     }
     private UIElement LogPage() { _logCode.Content = "记录完整代码和参数（默认开启）"; _logCode.IsChecked = Result.LogSourceAndParameters; _retention.Text = Result.LogRetentionDays.ToString(); var panel = Stack(); panel.Children.Add(_logCode); AddRow(panel, "日志保留天数", _retention); return panel; }

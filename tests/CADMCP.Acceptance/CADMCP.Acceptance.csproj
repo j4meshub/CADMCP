@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net48</TargetFramework><LangVersion>latest</LangVersion><Nullable>enable</Nullable><AutoCadDir>C:\Program Files\Autodesk\AutoCAD 2022</AutoCadDir></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../CADMCP.AutoCAD.Tests/HostTestDispatch.cs" Link="HostTestDispatch.cs" />
+    <Compile Include="../CADMCP.AutoCAD.Tests/ExecutionRegressionTests.cs" Link="ExecutionRegressionTests.cs" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <Reference Include="CADMCP.Plugin"><HintPath>../../plugin/bin/Release/net48/CADMCP.Plugin.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="CADMCP.CommandSet"><HintPath>../../commandset/bin/Release/net48/CADMCP.CommandSet.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcCoreMgd"><HintPath>$(AutoCadDir)\AcCoreMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcDbMgd"><HintPath>$(AutoCadDir)\AcDbMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="AcMgd"><HintPath>$(AutoCadDir)\AcMgd.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

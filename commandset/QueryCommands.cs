@@ -12,6 +12,7 @@ namespace CADMCP.CommandSet;
 public sealed class SayHelloCommand : ICadCommand
 {
     public string Name => "say_hello";
+    public CadExecutionKind ExecutionKind => CadExecutionKind.ReadOnly;
     public JObject Execute(CadCommandContext context, JObject parameters)
     {
         var message = parameters.Value<string>("message") ?? "你好，我已连接 AutoCAD。"; context.Document.Editor.WriteMessage("\nCADMCP: " + message);
@@ -22,6 +23,7 @@ public sealed class SayHelloCommand : ICadCommand
 public sealed class CurrentDocumentInfoCommand : ICadCommand
 {
     public string Name => "get_current_document_info";
+    public CadExecutionKind ExecutionKind => CadExecutionKind.ReadOnly;
     public JObject Execute(CadCommandContext context, JObject parameters)
     {
         var db = context.Document.Database; var units = new CadUnits(db, context.Settings);
@@ -29,9 +31,13 @@ public sealed class CurrentDocumentInfoCommand : ICadCommand
         {
             var layer = (LayerTableRecord)tr.GetObject(db.Clayer, OpenMode.ForRead); var currentSpace = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
             var count = currentSpace.Cast<ObjectId>().Count();
-            return ExecutionResponses.Success(context.CallId, context.WithIdentity(new JObject { ["name"] = context.Document.Name, ["fileName"] = db.Filename, ["isModified"] = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("DBMOD")) != 0,
-                ["activeSpace"] = db.TileMode ? "model" : "paper", ["activeSpaceHandle"] = db.CurrentSpaceId.Handle.ToString(), ["insunits"] = db.Insunits.ToString(), ["externalUnit"] = units.ExternalUnit,
-                ["currentLayer"] = layer.Name, ["entityCount"] = count, ["coordinateSystemDefault"] = "ucs" }));
+            var value = DocumentInfoValues.Create(context.Document.Name, db.Filename,
+                Convert.ToInt32(Application.GetSystemVariable("DWGTITLED")) != 0,
+                Convert.ToInt32(Application.GetSystemVariable("DBMOD")));
+            value["activeSpace"] = db.TileMode ? "model" : "paper";
+            value["insunits"] = db.Insunits.ToString(); value["externalUnit"] = units.ExternalUnit;
+            value["currentLayer"] = layer.Name; value["entityCount"] = count; value["coordinateSystemDefault"] = "ucs";
+            return ExecutionResponses.Success(context.CallId, context.WithIdentity(value));
         }
     }
 }
@@ -39,6 +45,7 @@ public sealed class CurrentDocumentInfoCommand : ICadCommand
 public sealed class SelectedEntitiesCommand : ICadCommand
 {
     public string Name => "get_selected_entities";
+    public CadExecutionKind ExecutionKind => CadExecutionKind.ReadOnly;
     public JObject Execute(CadCommandContext context, JObject parameters)
     {
         var ids = context.InitialSelectionObjectIds; var limit = Math.Min(2000, Math.Max(1, parameters.Value<int?>("limit") ?? 200)); var include = parameters.Value<bool?>("includeGeometry") ?? false; var result = new JArray();
@@ -53,6 +60,7 @@ public sealed class SelectedEntitiesCommand : ICadCommand
 public sealed class QueryEntitiesCommand : ICadCommand
 {
     public string Name => "query_entities";
+    public CadExecutionKind ExecutionKind => CadExecutionKind.ReadOnly;
     public JObject Execute(CadCommandContext context, JObject parameters)
     {
         var db = context.Document.Database; var units = new CadUnits(db, context.Settings); var limit = Math.Min(2000, Math.Max(1, parameters.Value<int?>("limit") ?? 200)); var include = parameters.Value<bool?>("includeGeometry") ?? false;

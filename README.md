@@ -2,6 +2,8 @@
 
 CADMCP 是一个面向个人受信本地环境的 AutoCAD 2022 插件。它通过通用 stdio MCP 让 Claude、Codex、Cline 等客户端控制当前活动 DWG，并保留最重要的能力：AI 可以通过 `send_code_to_cad` 在 AutoCAD 进程内动态编译并执行 C#。
 
+各次版本的功能、修复及升级注意事项见 [更新记录](CHANGELOG.md)；已知限制及暂缓事项见 [后续待完善事项](docs/BACKLOG.md)。版本源仍仅为根目录 `version.json`，更新记录中的版本是历史标识，不是独立配置。
+
 ## 支持边界
 
 - Windows + AutoCAD 2022，插件目标为 .NET Framework 4.8。
@@ -20,13 +22,21 @@ TCP 使用 4 字节大端长度前缀和 UTF-8 JSON，单帧最大 8 MiB。插�
 
 ## MCP 工具
 
-`say_hello`、`get_current_document_info`、`get_selected_entities`、`query_entities`、`get_entity_details`、`set_selection`、`send_code_to_cad`、`get_execution_status`、`create_line`、`create_polyline`、`create_circle`、`create_text`，共 12 个工具。
+`say_hello`、`get_current_document_info`、`get_selected_entities`、`query_entities`、`get_entity_details`、`set_selection`、`clone_entities`、`transform_entities`、`send_code_to_cad`、`get_execution_status`、`create_line`、`create_polyline`、`create_circle`、`create_text`，共 14 个工具。
 
 全部工具默认启用，可在 Ribbon 的“设置”中逐项关闭。禁用项仍在 MCP 工具列表中，调用时返回 `tool_disabled`。
 
 固定绘图工具的坐标和长度以毫米输入，支持 `ucs`（默认）和 `wcs`。批量 `items` 在单一事务中原子创建；指定的图层或线型不存在时整批失败，不隐式创建资源。
 
+四个创建工具与复制/变换使用严格的原生命令撤销单元。需开启完整 UNDO、非 One 且不处于其他撤销组；不满足时写入前返回 `undo_unavailable`。成功调用可一次撤销；提交后收尾或选择出现 warning 时，不要重复创建。四个创建工具不提供 dryRun。
+
 `get_entity_details` 按句柄读取几何、块属性和样式；`set_selection` 支持替换、追加、移除和清空预选集，不修改 DWG 实体。两个新工具均要求传入最近读取结果的 `documentToken`、`activeSpaceHandle`，防止切换图纸或空间后误用句柄。详见 [第一批工具说明](docs/FIRST_BATCH_TOOLS.md)。
+
+`clone_entities` 原样复制并位移，返回源句柄与副本句柄映射；`transform_entities` 对原实体执行移动、旋转、等比缩放或镜像。两者支持显式句柄或初始选择集，要求文档/空间标识和 `expectedCount`，默认执行、可 `dryRun: true` 只读预览。文字沿用 AutoCAD 原生镜像行为及当前 `MIRRTEXT`，不强制反字，也不修改该设置。详见 [第二批工具说明](docs/SECOND_BATCH_TOOLS.md)。
+
+开发新工具前请先阅读 [开发入口](CONTRIBUTING.md) 和 [执行上下文设计](docs/architecture/EXECUTION_CONTEXTS.md)。固定只读/预览、选择与正式写入使用不同执行路径，这是撤销和选择正确性要求，不要合并为一条通用命令路径。
+
+文档信息的 `fileName` 表示原始图纸路径，未命名图纸为空字符串；`databaseFileName` 仅供诊断，可能是自动保存的 `.sv$`。新增 `isNamedDrawing` 和原始 `dbmod`，不改变 `isModified` 的含义。
 
 ## 动态 C#
 
@@ -42,7 +52,11 @@ units
 
 `auto` 会锁定文档并创建单一数据库事务；成功提交，异常回滚。`none` 仍锁定文档，但 `transaction` 为 `null`，副作用和撤销由代码负责。框架从不自动保存 DWG。
 
+动态代码以完整能力优先，撤销尽力而为：`auto/none` 均返回 `undoGuaranteed=false`，不代表不能撤销，也不代表调用失败。框架不因为 UNDO 关闭/One/已有组而拒绝动态代码，不限制代码自行调用命令或管理事务/撤销。auto 的回滚只涵盖框架事务内的修改，不涵盖外部副作用。none 的 `committed=false` 不表示代码没有写入。已提交后的 warning 不应触发自动重试。
+
 Node 最长等待 5 分钟。超时不会强杀 AutoCAD 线程，而会返回 `timeout_unknown` 和 `callId`，之后可用 `get_execution_status` 查询。动态程序集在进程内不可卸载；默认编译 100 次后提示重启，但不停止核心能力。
+
+已知待完善项：冷启动后使用 C# `dynamic` 可能需要显式引用系统 `Microsoft.CSharp.dll`；插件不会在编译报错后自动补齐并重试。影响范围、临时处理方法及后续方案见 [待完善记录 DEP-001](docs/BACKLOG.md#dep-001为动态-c-自动准备-microsoftcsharp-基础引用)。
 
 ## 构建
 

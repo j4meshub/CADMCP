@@ -9,6 +9,12 @@
     <Compile Include="../../plugin/EntitySelectionRules.cs" Link="EntitySelectionRules.cs" />
     <Compile Include="../../plugin/Settings.cs" Link="Settings.cs" />
     <Compile Include="../../plugin/VersionInfo.cs" Link="VersionInfo.cs" />
+    <Compile Include="../../plugin/SelectionResponsePolicy.cs" Link="SelectionResponsePolicy.cs" />
+    <Compile Include="../../plugin/CommandExecutionPolicy.cs" Link="CommandExecutionPolicy.cs" />
+    <Compile Include="../../plugin/NativeUndoState.cs" Link="NativeUndoState.cs" />
+    <Compile Include="../../commandset/DocumentInfoValues.cs" Link="DocumentInfoValues.cs" />
+    <Compile Include="../../commandset/ModifyRequest.cs" Link="ModifyRequest.cs" />
+    <Compile Include="../../commandset/TransformMath.cs" Link="TransformMath.cs" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 </Project>

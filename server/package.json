@@ -1,6 +1,6 @@
 {
     "name": "cadmcp-server",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "通用 MCP stdio 服务器，用于通过 CADMCP 控制 AutoCAD 2022",
     "main": "build/index.js",
     "type": "module",

@@ -33,10 +33,11 @@ public sealed class CadExecutionContext
 public sealed class SendCodeToCadCommand : ICadCommand
 {
     public string Name => "send_code_to_cad";
+    public CadExecutionKind ExecutionKind => CadExecutionKind.CommandContext;
     public JObject Execute(CadCommandContext commandContext, JObject parameters)
     {
         var watch = Stopwatch.StartNew(); var mode = parameters.Value<string>("transactionMode") ?? "auto"; if (mode != "auto" && mode != "none") return ExecutionResponses.Failure(commandContext.CallId, "invalid_transaction_mode", new ArgumentException("transactionMode 只能是 auto 或 none"), 0, mode);
-        var warnings = new JArray();
+        var warnings = new JArray(); var committed = false;
         if (!CompilerRuntimeStatus.IsReady)
             return ExecutionResponses.Failure(commandContext.CallId, "compiler_initialization_failed",
                 new InvalidOperationException(CompilerRuntimeStatus.Message + Environment.NewLine + CompilerRuntimeStatus.Details), 0, mode);
@@ -45,23 +46,30 @@ public sealed class SendCodeToCadCommand : ICadCommand
             var compiled = Compile(parameters.Value<string>("code") ?? throw new ArgumentException("code 不能为空"), parameters["usings"] as JArray, parameters["references"] as JArray, warnings);
             var count = RuntimeMetrics.IncrementCompilationCount(); if (count >= commandContext.Settings.DynamicAssemblyWarningThreshold) warnings.Add($"当前会话已动态编译 {count} 次，建议在合适时重启 AutoCAD 以释放程序集内存。");
             var namedParameters = parameters["parameters"] as JObject ?? new JObject(); object? raw;
-            var undoGuaranteed = false;
+            // Capability first: keep command context, full APIs and auto/none semantics.
+            // Never nest ActiveX marks or gate arbitrary C# on strict UNDO conditions.
+            warnings.Add(new JObject { ["code"] = "undo_not_guaranteed", ["message"] = "动态代码不提供严格撤销保证；不代表不能撤销。auto 保留框架事务，none 由代码管理事务及副作用。" });
             using (commandContext.Document.LockDocument())
             {
                 if (mode == "auto")
                 {
-                    using (var undo = new UndoBoundary(commandContext.Document))
                     using (var tr = commandContext.Document.Database.TransactionManager.StartTransaction())
                     {
-                        try { raw = Invoke(compiled, new CadExecutionContext(commandContext.Document, tr, new CadUnits(commandContext.Document.Database, commandContext.Settings), commandContext.CallId, mode, commandContext.InitialSelectionObjectIds, commandContext.InitialSelectionHandles), namedParameters); tr.Commit(); undoGuaranteed = undo.IsGuaranteed; }
-                        catch { throw; }
+                        raw = Invoke(compiled, new CadExecutionContext(commandContext.Document, tr, new CadUnits(commandContext.Document.Database, commandContext.Settings), commandContext.CallId, mode, commandContext.InitialSelectionObjectIds, commandContext.InitialSelectionHandles), namedParameters);
+                        tr.Commit(); committed = true;
                     }
                 }
                 else raw = Invoke(compiled, new CadExecutionContext(commandContext.Document, null, new CadUnits(commandContext.Document.Database, commandContext.Settings), commandContext.CallId, mode, commandContext.InitialSelectionObjectIds, commandContext.InitialSelectionHandles), namedParameters);
             }
             watch.Stop(); var serialized = SafeResult(raw, warnings);
-            if (mode == "auto" && !undoGuaranteed) warnings.Add("无法创建显式 AutoCAD 撤销边界；数据库事务仍已提交。");
-            return ExecutionResponses.Success(commandContext.CallId, serialized, watch.ElapsedMilliseconds, mode, mode == "auto", undoGuaranteed, warnings);
+            return ExecutionResponses.Success(commandContext.CallId, serialized, watch.ElapsedMilliseconds, mode, committed, false, warnings);
+        }
+        catch (Exception error) when (committed)
+        {
+            // A serialization/lock-disposal failure after Commit must not claim rollback
+            // or encourage retrying code that has already changed the database.
+            warnings.Add(new JObject { ["code"] = "post_commit_warning", ["message"] = "数据库已提交，但动态结果收尾失败；不要自动重试。" + Unwrap(error).Message });
+            return ExecutionResponses.Success(commandContext.CallId, null, watch.ElapsedMilliseconds, mode, true, false, warnings);
         }
         catch (CompilationFailure error) { watch.Stop(); return ExecutionResponses.Failure(commandContext.CallId, "compilation_failed", error, watch.ElapsedMilliseconds, mode, false, error.Diagnostics, warnings); }
         catch (DynamicReferenceException error)

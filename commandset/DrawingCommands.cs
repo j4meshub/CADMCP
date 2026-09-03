@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
 using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using CADMCP.Plugin;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace CADMCP.CommandSet;
@@ -12,22 +14,57 @@ namespace CADMCP.CommandSet;
 public abstract class AtomicCreateCommand : ICadCommand
 {
     public abstract string Name { get; }
+    public CadExecutionKind ExecutionKind => CadExecutionKind.FixedWrite;
     public JObject Execute(CadCommandContext context, JObject parameters)
     {
-        var watch = Stopwatch.StartNew(); var db = context.Document.Database; var units = new CadUnits(db, context.Settings); var system = parameters.Value<string>("coordinateSystem") ?? "ucs"; var handles = new JArray(); var created = new JArray();
-        using (context.Document.LockDocument())
-        using (var undo = new UndoBoundary(context.Document))
-        using (var tr = db.TransactionManager.StartTransaction())
+        var watch = Stopwatch.StartNew();
+        JObject? response = null; var committed = false; var transactionStarted = false;
+        try
         {
-            try
+            // Validate the dispatcher's capability before touching CAD. This is not
+            // another undo group; EXECUTEFUNCTION already owns the native unit.
+            StrictUndoBoundary.Require(context);
+            var db = context.Document.Database; var units = new CadUnits(db, context.Settings);
+            var system = parameters.Value<string>("coordinateSystem") ?? "ucs";
+            var handles = new JArray(); var created = new JArray();
+            using (context.Document.LockDocument(Autodesk.AutoCAD.ApplicationServices.DocumentLockMode.Write, null, null, false))
+            using (var tr = db.TransactionManager.StartTransaction())
             {
-                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite); var items = parameters["items"] as JArray ?? throw new ArgumentException("items 必须是数组"); if (items.Count == 0) throw new ArgumentException("items 不能为空");
+                transactionStarted = true;
+                var items = parameters["items"] as JArray ?? throw new ArgumentException("items 必须是数组");
+                if (items.Count == 0) throw new ArgumentException("items 不能为空");
                 ValidateResources(items, tr, db);
-                foreach (JObject item in items) { var entity = Create(item, units, context.Document.Editor, system); entity.SetDatabaseDefaults(db); Apply(entity, item, tr, db); space.AppendEntity(entity); tr.AddNewlyCreatedDBObject(entity, true); handles.Add(entity.Handle.ToString()); created.Add(EntitySerialization.Summary(entity, units, false)); }
-                tr.Commit(); watch.Stop(); var warnings = undo.IsGuaranteed ? new JArray() : new JArray("无法创建显式 AutoCAD 撤销边界；事务原子性仍有效。");
-                return ExecutionResponses.Success(context.CallId, new JObject { ["handles"] = handles, ["items"] = created, ["count"] = handles.Count, ["inputCoordinateSystem"] = system, ["unit"] = "Millimeters" }, watch.ElapsedMilliseconds, "auto", true, undo.IsGuaranteed, warnings);
+                StrictUndoBoundary.Require(context);
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                foreach (JObject item in items)
+                {
+                    using (var entity = Create(item, units, context.Document.Editor, system))
+                    {
+                        entity.SetDatabaseDefaults(db); Apply(entity, item, tr, db);
+                        space.AppendEntity(entity); tr.AddNewlyCreatedDBObject(entity, true);
+                        handles.Add(entity.Handle.ToString()); created.Add(EntitySerialization.Summary(entity, units, false));
+                    }
+                }
+                // Materialize the response before committing. No live DBObject escapes.
+                response = ExecutionResponses.Success(context.CallId, new JObject { ["handles"] = handles, ["items"] = created, ["count"] = handles.Count, ["inputCoordinateSystem"] = system, ["unit"] = "Millimeters" }, watch.ElapsedMilliseconds, "auto", true, false);
+                if (Encoding.UTF8.GetByteCount(response.ToString(Formatting.None)) > 7 * 1024 * 1024)
+                    throw new CadCommandException("result_too_large", "创建结果过大，请减少每批数量");
+                tr.Commit(); committed = true;
             }
-            catch (Exception error) { watch.Stop(); return ExecutionResponses.Failure(context.CallId, error is KeyNotFoundException ? "missing_resource" : "invalid_parameters", error, watch.ElapsedMilliseconds, "auto", true); }
+            response!["durationMs"] = watch.ElapsedMilliseconds;
+            // Only the dispatcher, after native command completion, sets undoGuaranteed.
+            return response;
+        }
+        catch (Exception error)
+        {
+            if (committed && response != null)
+            {
+                ((JArray)response["warnings"]!).Add(new JObject { ["code"] = "post_commit_warning", ["message"] = error.Message });
+                return response;
+            }
+            return ExecutionResponses.Failure(context.CallId,
+                error is CadCommandException business ? business.Code : error is KeyNotFoundException ? "missing_resource" : "invalid_parameters",
+                error, watch.ElapsedMilliseconds, "auto", transactionStarted);
         }
     }
     protected abstract Entity Create(JObject item, CadUnits units, Autodesk.AutoCAD.EditorInput.Editor editor, string system);

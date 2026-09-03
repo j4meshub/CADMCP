@@ -38,9 +38,24 @@ public sealed class CadDispatcher
         var selectionSpaceId = ObjectId.Null;
         var selectionToRestore = SelectionSnapshot.Empty;
         var selectionApplied = false;
+        var managedSelection = false;
+        JObject? result = null;
+        NativeCommandUndoScope? nativeUndo = null;
         try
         {
-            var dispatch = await InApplicationContextAsync(() => CaptureDispatchState(method == "set_selection"));
+            var command = _registry.Get(method);
+            var route = CommandExecutionPolicy.Resolve(command.ExecutionKind, parameters);
+            managedSelection = CommandExecutionPolicy.PreserveInitialSelection(command.ExecutionKind);
+
+            // Fixed reads/validated previews/selection do NOT enter a CAD command. Do not
+            // merge this with the write path: command entry and default write locks can
+            // consume an UNDO step even when all entities are opened ForRead.
+            if (route != CadExecutionKind.CommandContext)
+            {
+                result = await InApplicationContextAsync(() => ExecuteApplicationCall(command, route, parameters, callId));
+                return Finish(callId, result);
+            }
+            var dispatch = await InApplicationContextAsync(() => CaptureDispatchState(managedSelection));
             var document = dispatch.Document;
             if (document == null) return Finish(callId, Error(callId, "no_active_document", "AutoCAD 没有活动文档。"));
             if (!dispatch.IsAvailable)
@@ -49,8 +64,8 @@ public sealed class CadDispatcher
             selectionSpaceId = dispatch.ActiveSpaceId;
             selectionToRestore = dispatch.Selection;
 
-            JObject? result = null;
             Exception? failure = null;
+            var failureWarning = "post_commit_callback_failed";
             var finalSelection = dispatch.Selection;
             ObjectId[]? requestedSelection = null;
 
@@ -59,20 +74,31 @@ public sealed class CadDispatcher
                 try
                 {
                     EnsureDispatchDocument(document, dispatch.ActiveSpaceId);
-                    if (method != "set_selection") ApplySelection(document, dispatch.Selection.ObjectIds);
+                    // Only formal fixed writes receive strict native undo capability.
+                    // Reads/previews never get here; dynamic code stays best-effort.
+                    if (CommandExecutionPolicy.RequiresNativeUndo(command.ExecutionKind))
+                        nativeUndo = new NativeCommandUndoScope(document, dispatch.ActiveSpaceId);
+                    if (!managedSelection) ApplySelection(document, dispatch.Selection.ObjectIds);
                     var context = new CadCommandContext(document, SettingsStore.Current, callId,
-                        dispatch.Selection.ObjectIds, dispatch.Selection.Handles);
-                    result = _registry.Get(method).Execute(context, parameters);
+                        dispatch.Selection.ObjectIds, dispatch.Selection.Handles, nativeUndo);
+                    result = command.Execute(context, parameters);
                     requestedSelection = context.RequestedSelection?.ToArray();
                 }
                 catch (Exception error) { failure = error; }
                 finally
                 {
-                    finalSelection = CaptureSelection(document);
-                    selectionToRestore = method == "set_selection" ? dispatch.Selection : finalSelection;
+                    // Nothing, including cleanup, may throw through AutoCAD's native callback.
+                    try
+                    {
+                        finalSelection = managedSelection ? dispatch.Selection : CaptureSelection(document);
+                        selectionToRestore = finalSelection;
+                    }
+                    catch (Exception error) { failure ??= error; }
+                    finally { nativeUndo?.EndCallback(); }
                 }
                 await Task.CompletedTask;
             }, null);
+            nativeUndo?.CompleteResponse(result, failure);
 
             if (failure == null && requestedSelection != null && result?.Value<bool>("success") == true)
             {
@@ -88,13 +114,15 @@ public sealed class CadDispatcher
                         if (actual.ObjectIds.Length != requestedSelection.Length || actual.ObjectIds.Except(requestedSelection).Any())
                             throw new CadCommandException("selection_failed", "CAD 实际选择与请求不一致；尝试恢复原选择");
                         selectionApplied = true;
+                        if (result?["result"] is JObject value && value["selectionApplied"] != null) value["selectionApplied"] = true;
                         return true;
                     });
                 }
-                catch (Exception error) { failure = error; }
+                catch (Exception error) { failure = error; failureWarning = "post_commit_selection_failed"; }
             }
-            if (failure != null) result = ExecutionResponses.Failure(callId, failure is CadCommandException business ? business.Code : "execution_failed", failure);
-            if (method == "set_selection" && !selectionApplied)
+            if (failure != null && !SelectionResponsePolicy.PreserveCommitted(result, failure, failureWarning))
+                result = ExecutionResponses.Failure(callId, failure is CadCommandException business ? business.Code : "execution_failed", failure);
+            if (managedSelection && !selectionApplied)
             {
                 // Validation errors must not leave the command-context side effect of clearing preselection.
                 // Report restoration failures instead of silently replacing the previous selection with empty.
@@ -117,14 +145,16 @@ public sealed class CadDispatcher
                 }
                 selectionApplied = true; // Restoration was handled explicitly; do not invoke the silent fallback.
             }
-            if ((method == "get_entity_details" || method == "get_selected_entities" || method == "query_entities") &&
-                result != null && Encoding.UTF8.GetByteCount(result.ToString(Formatting.None)) > 7 * 1024 * 1024)
-                result = Error(callId, "result_too_large", "读取结果过大，请缩小范围或关闭几何详情");
             return Finish(callId, result ?? Error(callId, "empty_response", "命令未返回结果"));
         }
         catch (Exception error)
         {
-            return Finish(callId, ExecutionResponses.Failure(callId, "dispatch_failed", error));
+            // Idempotent: only a not-yet-completed native command can lose its guarantee.
+            // Preserve committed handles/mappings even if command finalization fails.
+            nativeUndo?.CompleteResponse(result, error);
+            if (SelectionResponsePolicy.PreserveCommitted(result, error, "post_commit_warning")) return Finish(callId, result!);
+            return Finish(callId, ExecutionResponses.Failure(callId,
+                error is CadCommandException business ? business.Code : "dispatch_failed", error));
         }
         finally
         {
@@ -142,6 +172,68 @@ public sealed class CadDispatcher
                 catch { }
             }
             _slot.Release();
+        }
+    }
+
+    private static JObject ExecuteApplicationCall(ICadCommand command, CadExecutionKind route, JObject parameters, string callId)
+    {
+        // This entire synchronous callback runs on the AutoCAD application thread. No
+        // await/Task.Run between identity capture, read validation and selection apply.
+        var state = CaptureDispatchState(true);
+        var document = state.Document;
+        if (document == null) return Error(callId, "no_active_document", "AutoCAD 没有活动文档。");
+        if (!state.IsAvailable) return Error(callId, "cad_busy", "AutoCAD 当前正在执行命令: " + state.CommandNames);
+        EnsureDispatchDocument(document, state.ActiveSpaceId);
+        var context = new CadCommandContext(document, SettingsStore.Current, callId, state.Selection.ObjectIds, state.Selection.Handles);
+        JObject result;
+        using (document.LockDocument(DocumentLockMode.Read, null, null, false))
+            result = command.Execute(context, parameters);
+        // A misclassified future command is a developer error, not permission to hide
+        // an already-reported commit and encourage the caller to repeat a write.
+        if (result.Value<bool>("committed"))
+        {
+            SelectionResponsePolicy.PreserveCommitted(result,
+                new InvalidOperationException("应用上下文命令错误地报告了数据库提交，请检查 ExecutionKind 声明"), "execution_contract_violation");
+            return result;
+        }
+        EnsureDispatchDocument(document, state.ActiveSpaceId);
+        if (Encoding.UTF8.GetByteCount(result.ToString(Formatting.None)) > 7 * 1024 * 1024)
+            return Error(callId, "result_too_large", "读取结果过大，请缩小范围或关闭几何详情");
+
+        if (route == CadExecutionKind.ReadOnly)
+        {
+            // Never restore/set selection for a normal read: that was the old workaround
+            // for command-context preselection clearing and can itself affect history.
+            if (context.RequestedSelection != null)
+                throw new CadCommandException("execution_contract_violation", "只读命令不得请求选择更新");
+            return result;
+        }
+        if (context.RequestedSelection == null || !result.Value<bool>("success")) return result;
+        try
+        {
+            EnsureDispatchDocument(document, state.ActiveSpaceId);
+            var ids = context.RequestedSelection.ToArray();
+            if (ids.Any(id => !IsUsable(id))) throw new CadCommandException("entity_not_found", "应用选择前实体已失效");
+            document.Editor.SetImpliedSelection(ids);
+            var actual = CaptureSelection(document, true);
+            if (actual.ObjectIds.Length != ids.Length || actual.ObjectIds.Except(ids).Any())
+                throw new CadCommandException("selection_failed", "CAD 实际选择与请求不一致");
+            return result;
+        }
+        catch (Exception error)
+        {
+            result = ExecutionResponses.Failure(callId, error is CadCommandException business ? business.Code : "selection_failed", error);
+            try
+            {
+                EnsureDispatchDocument(document, state.ActiveSpaceId);
+                document.Editor.SetImpliedSelection(state.Selection.ObjectIds);
+                var actual = CaptureSelection(document, true);
+                if (actual.ObjectIds.Length != state.Selection.ObjectIds.Length || actual.ObjectIds.Except(state.Selection.ObjectIds).Any())
+                    throw new InvalidOperationException("CAD 未恢复完整的原选择集");
+            }
+            catch (Exception restore)
+            { ((JArray)result["warnings"]!).Add(new JObject { ["code"] = "selection_restore_failed", ["message"] = restore.Message }); }
+            return result;
         }
     }
 

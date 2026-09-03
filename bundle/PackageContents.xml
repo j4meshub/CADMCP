@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ApplicationPackage SchemaVersion="1.0" AutodeskProduct="AutoCAD" Name="CADMCP" Description="通过 MCP 控制 AutoCAD 2022" AppVersion="2.0.0" ProductCode="{570649E5-C33A-4106-872D-F30C406D36DA}" UpgradeCode="{57BEF96E-4E7A-4750-B214-7B9E83E75698}" Author="j4meshub" ProductType="Application">
+<ApplicationPackage SchemaVersion="1.0" AutodeskProduct="AutoCAD" Name="CADMCP" Description="通过 MCP 控制 AutoCAD 2022" AppVersion="2.1.0" ProductCode="{570649E5-C33A-4106-872D-F30C406D36DA}" UpgradeCode="{57BEF96E-4E7A-4750-B214-7B9E83E75698}" Author="j4meshub" ProductType="Application">
   <CompanyDetails Name="j4meshub" Url="https://github.com/j4meshub/CADMCP" />
   <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R24.1" SeriesMax="R24.1" />
   <Components>
     <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R24.1" SeriesMax="R24.1" />
-    <ComponentEntry AppName="CADMCP" Version="2.0.0" ModuleName="./Contents/CADMCP.Plugin.dll" AppDescription="CADMCP AutoCAD 2022 插件" LoadOnAutoCADStartup="True" />
+    <ComponentEntry AppName="CADMCP" Version="2.1.0" ModuleName="./Contents/CADMCP.Plugin.dll" AppDescription="CADMCP AutoCAD 2022 插件" LoadOnAutoCADStartup="True" />
   </Components>
 </ApplicationPackage>
