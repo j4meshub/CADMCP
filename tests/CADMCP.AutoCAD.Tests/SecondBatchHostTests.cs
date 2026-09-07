@@ -112,6 +112,31 @@ public sealed class SecondBatchHostTests
             await HostTestDispatch.Undo(doc);
             Check((await State(doc)).Count == baseline.Count, "one UNDO removes complete clone batch");
 
+            // Regression for the 2.1.0 native crash: replace a nonempty old pickfirst set
+            // with four different, freshly committed entities via the flagged bridge.
+            var selectOld = (JObject)identity.DeepClone();
+            selectOld["mode"] = "replace"; selectOld["handles"] = new JArray(pair); selectOld["expectedCount"] = pair.Length;
+            Check((await Call("set_selection", selectOld)).Value<bool>("success"), "selection bridge old nonempty set");
+            var four = handles.Take(4).ToArray();
+            var replacementClone = await Call("clone_entities", Args(four, true));
+            Check(replacementClone.Value<bool>("committed"), "selection bridge replacement fixture committed");
+            var replacementHandles = replacementClone["result"]!["createdHandles"]!.Values<string>()
+                .Select(value => value ?? throw new InvalidOperationException("副本 Handle 为空")).ToArray();
+            var selectFresh = (JObject)identity.DeepClone();
+            selectFresh["mode"] = "replace"; selectFresh["handles"] = new JArray(replacementHandles); selectFresh["expectedCount"] = 4;
+            var replaced = await Call("set_selection", selectFresh);
+            var selectedFresh = await Call("get_selected_entities", new JObject { ["limit"] = 10 });
+            Check(replaced.Value<bool>("success") &&
+                selectedFresh["result"]!["items"]!.Values<JObject>()
+                    .Select(x => x?.Value<string>("handle") ?? throw new InvalidOperationException("选择结果 Handle 为空"))
+                    .ToHashSet().SetEquals(replacementHandles),
+                "selection bridge nonempty to four fresh entities");
+            await HostTestDispatch.Undo(doc);
+            Check((await State(doc)).Count == baseline.Count, "selection bridge adds no undo marker");
+            var clearAfterBridge = (JObject)identity.DeepClone();
+            clearAfterBridge["mode"] = "clear"; clearAfterBridge["handles"] = new JArray(); clearAfterBridge["expectedCount"] = 0;
+            Check((await Call("set_selection", clearAfterBridge)).Value<bool>("success"), "selection bridge clear after erased selection");
+
             foreach (var op in new[] { "{type:'move',displacement:{x:10,y:20}}", "{type:'rotate',basePoint:{x:0,y:0},angle:1.5707963267948966}", "{type:'scale',basePoint:{x:0,y:0},factor:2}", "{type:'mirror',axisStart:{x:0,y:0},axisEnd:{x:0,y:1}}" })
             {
                 var p = Args(pair, false); p["operation"] = JObject.Parse(op);

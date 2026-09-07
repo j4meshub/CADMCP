@@ -30,7 +30,7 @@ TCP 使用 4 字节大端长度前缀和 UTF-8 JSON，单帧最大 8 MiB。插�
 
 四个创建工具与复制/变换使用严格的原生命令撤销单元。需开启完整 UNDO、非 One 且不处于其他撤销组；不满足时写入前返回 `undo_unavailable`。成功调用可一次撤销；提交后收尾或选择出现 warning 时，不要重复创建。四个创建工具不提供 dryRun。
 
-`get_entity_details` 按句柄读取几何、块属性和样式；`set_selection` 支持替换、追加、移除和清空预选集，不修改 DWG 实体。两个新工具均要求传入最近读取结果的 `documentToken`、`activeSpaceHandle`，防止切换图纸或空间后误用句柄。详见 [第一批工具说明](docs/FIRST_BATCH_TOOLS.md)。
+`get_entity_details` 按句柄读取几何、块属性和样式；`set_selection` 支持替换、追加、移除和清空预选集，不修改 DWG 实体。框架选择通过带 Redraw/NoUndoMarker 的内部文档命令桥应用，避免从应用上下文直接进入原生 PickFirst API。两个工具均要求传入最近读取结果的 `documentToken`、`activeSpaceHandle`，防止切换图纸或空间后误用句柄。详见 [第一批工具说明](docs/FIRST_BATCH_TOOLS.md)。
 
 `clone_entities` 原样复制并位移，返回源句柄与副本句柄映射；`transform_entities` 对原实体执行移动、旋转、等比缩放或镜像。两者支持显式句柄或初始选择集，要求文档/空间标识和 `expectedCount`，默认执行、可 `dryRun: true` 只读预览。文字沿用 AutoCAD 原生镜像行为及当前 `MIRRTEXT`，不强制反字，也不修改该设置。详见 [第二批工具说明](docs/SECOND_BATCH_TOOLS.md)。
 

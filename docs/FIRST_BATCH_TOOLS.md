@@ -72,11 +72,11 @@
 - 其他模式要求非空 handles，输入和最终结果最多 2000 个。
 - `expectedCount` 校验**最终去重后的选择数量**，不是传入句柄数量。例如原选 2 个，追加 1 个新对象，应填 3。
 
-结果返回 `previousHandles`、`selectedHandles`、`count`、文档和空间标识。先验证所有目标，再在 AutoCAD 应用上下文应用最终选择，并核对实际集合。失败时恢复原选择；若 AutoCAD 无法恢复，明确返回警告。关闭/冻结图层或不可见实体不能加入最终选择；不会自动开图层、改变 PICKFIRST、解锁或修改实体。
+结果返回 `previousHandles`、`selectedHandles`、`count`、文档和空间标识。先在应用上下文验证所有目标，再由带 Redraw/NoUndoMarker 的内部文档命令应用并核对最终集合；框架不在应用上下文直接调用原生选择 API。命令排队期间用户选择、图纸或空间改变时拒绝覆盖。失败时恢复原选择；若 AutoCAD 无法恢复，明确返回警告。关闭/冻结图层、不可见实体及纸空间背景视口不能加入最终选择；不会自动开图层、改变 PICKFIRST、解锁或修改实体。
 
 本工具仅使用只读事务验证实体，不创建数据库写入事务或 UNDO 单元，成功时 `committed`、`rolledBack`、`undoGuaranteed` 均为 false（它们描述数据库行为，不代表选择工具失败）。不保存 DWG。
 
-常见错误：`invalid_parameters`、`document_mismatch`、`active_space_mismatch`、`entity_not_found`、`wrong_entity_type`、`entity_outside_active_space`、`entity_not_selectable`、`count_mismatch`、`selection_failed`。仍保留 `cad_busy`、`tool_disabled`、超时与状态查询行为。
+常见错误：`invalid_parameters`、`document_mismatch`、`active_space_mismatch`、`entity_not_found`、`wrong_entity_type`、`entity_outside_active_space`、`entity_not_selectable`、`count_mismatch`、`selection_state_changed`、`selection_unavailable`、`selection_failed`。仍保留 `cad_busy`、`tool_disabled`、超时与状态查询行为。
 
 ## 测试与升级
 

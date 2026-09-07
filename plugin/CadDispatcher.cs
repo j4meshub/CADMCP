@@ -52,7 +52,26 @@ public sealed class CadDispatcher
             // consume an UNDO step even when all entities are opened ForRead.
             if (route != CadExecutionKind.CommandContext)
             {
-                result = await InApplicationContextAsync(() => ExecuteApplicationCall(command, route, parameters, callId));
+                var applicationCall = await InApplicationContextAsync(() => ExecuteApplicationCall(command, route, parameters, callId));
+                result = applicationCall.Response;
+                if (applicationCall.RequestedSelection != null && result.Value<bool>("success"))
+                {
+                    try
+                    {
+                        var selectionTask = await InApplicationContextAsync(() => SelectionCommandBridge.ApplyAsync(
+                            applicationCall.Document, applicationCall.ActiveSpaceId,
+                            applicationCall.InitialSelection, applicationCall.RequestedSelection));
+                        await selectionTask;
+                    }
+                    catch (Exception error)
+                    {
+                        result = ExecutionResponses.Failure(callId,
+                            error is CadCommandException business ? business.Code : "selection_failed", error);
+                        if (error is SelectionBridgeRestoreException restore)
+                            ((JArray)result["warnings"]!).Add(new JObject
+                            { ["code"] = "selection_restore_failed", ["message"] = restore.RestoreError.Message });
+                    }
+                }
                 return Finish(callId, result);
             }
             var dispatch = await InApplicationContextAsync(() => CaptureDispatchState(managedSelection));
@@ -78,7 +97,7 @@ public sealed class CadDispatcher
                     // Reads/previews never get here; dynamic code stays best-effort.
                     if (CommandExecutionPolicy.RequiresNativeUndo(command.ExecutionKind))
                         nativeUndo = new NativeCommandUndoScope(document, dispatch.ActiveSpaceId);
-                    if (!managedSelection) ApplySelection(document, dispatch.Selection.ObjectIds);
+                    if (!managedSelection) ApplySelectionInCommandContext(document, dispatch.Selection.ObjectIds);
                     var context = new CadCommandContext(document, SettingsStore.Current, callId,
                         dispatch.Selection.ObjectIds, dispatch.Selection.Handles, nativeUndo);
                     result = command.Execute(context, parameters);
@@ -104,19 +123,9 @@ public sealed class CadDispatcher
             {
                 try
                 {
-                    await InApplicationContextAsync(() =>
-                    {
-                        EnsureDispatchDocument(document, dispatch.ActiveSpaceId);
-                        if (requestedSelection.Any(id => !IsUsable(id)))
-                            throw new CadCommandException("entity_not_found", "应用选择前实体已失效");
-                        document.Editor.SetImpliedSelection(requestedSelection);
-                        var actual = CaptureSelection(document, true);
-                        if (actual.ObjectIds.Length != requestedSelection.Length || actual.ObjectIds.Except(requestedSelection).Any())
-                            throw new CadCommandException("selection_failed", "CAD 实际选择与请求不一致；尝试恢复原选择");
-                        selectionApplied = true;
-                        if (result?["result"] is JObject value && value["selectionApplied"] != null) value["selectionApplied"] = true;
-                        return true;
-                    });
+                    await ApplySelectionViaBridgeAsync(document, dispatch.ActiveSpaceId, requestedSelection);
+                    selectionApplied = true;
+                    if (result?["result"] is JObject value && value["selectionApplied"] != null) value["selectionApplied"] = true;
                 }
                 catch (Exception error) { failure = error; failureWarning = "post_commit_selection_failed"; }
             }
@@ -128,15 +137,7 @@ public sealed class CadDispatcher
                 // Report restoration failures instead of silently replacing the previous selection with empty.
                 try
                 {
-                    await InApplicationContextAsync(() =>
-                    {
-                        EnsureDispatchDocument(document, dispatch.ActiveSpaceId);
-                        document.Editor.SetImpliedSelection(dispatch.Selection.ObjectIds);
-                        var actual = CaptureSelection(document, true);
-                        if (actual.ObjectIds.Length != dispatch.Selection.ObjectIds.Length || actual.ObjectIds.Except(dispatch.Selection.ObjectIds).Any())
-                            throw new InvalidOperationException("CAD 未恢复完整的原选择集");
-                        return true;
-                    });
+                    await ApplySelectionViaBridgeAsync(document, dispatch.ActiveSpaceId, dispatch.Selection.ObjectIds);
                 }
                 catch (Exception error)
                 {
@@ -162,12 +163,8 @@ public sealed class CadDispatcher
             {
                 try
                 {
-                    await InApplicationContextAsync(() =>
-                    {
-                        if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, selectionDocument) && selectionDocument.Database.CurrentSpaceId == selectionSpaceId)
-                            ApplySelection(selectionDocument, selectionToRestore.ObjectIds);
-                        return true;
-                    });
+                    if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, selectionDocument) && selectionDocument.Database.CurrentSpaceId == selectionSpaceId)
+                        await ApplySelectionViaBridgeAsync(selectionDocument, selectionSpaceId, selectionToRestore.ObjectIds);
                 }
                 catch { }
             }
@@ -175,14 +172,15 @@ public sealed class CadDispatcher
         }
     }
 
-    private static JObject ExecuteApplicationCall(ICadCommand command, CadExecutionKind route, JObject parameters, string callId)
+    private static ApplicationCallResult ExecuteApplicationCall(ICadCommand command, CadExecutionKind route, JObject parameters, string callId)
     {
         // This entire synchronous callback runs on the AutoCAD application thread. No
-        // await/Task.Run between identity capture, read validation and selection apply.
+        // await/Task.Run between identity capture and read validation. Selection changes
+        // are returned as intent and later applied by the flagged document-command bridge.
         var state = CaptureDispatchState(true);
         var document = state.Document;
-        if (document == null) return Error(callId, "no_active_document", "AutoCAD 没有活动文档。");
-        if (!state.IsAvailable) return Error(callId, "cad_busy", "AutoCAD 当前正在执行命令: " + state.CommandNames);
+        if (document == null) return new ApplicationCallResult(Error(callId, "no_active_document", "AutoCAD 没有活动文档。"));
+        if (!state.IsAvailable) return new ApplicationCallResult(Error(callId, "cad_busy", "AutoCAD 当前正在执行命令: " + state.CommandNames));
         EnsureDispatchDocument(document, state.ActiveSpaceId);
         var context = new CadCommandContext(document, SettingsStore.Current, callId, state.Selection.ObjectIds, state.Selection.Handles);
         JObject result;
@@ -194,11 +192,11 @@ public sealed class CadDispatcher
         {
             SelectionResponsePolicy.PreserveCommitted(result,
                 new InvalidOperationException("应用上下文命令错误地报告了数据库提交，请检查 ExecutionKind 声明"), "execution_contract_violation");
-            return result;
+            return new ApplicationCallResult(result, document, state.ActiveSpaceId, state.Selection.ObjectIds, null);
         }
         EnsureDispatchDocument(document, state.ActiveSpaceId);
         if (Encoding.UTF8.GetByteCount(result.ToString(Formatting.None)) > 7 * 1024 * 1024)
-            return Error(callId, "result_too_large", "读取结果过大，请缩小范围或关闭几何详情");
+            return new ApplicationCallResult(Error(callId, "result_too_large", "读取结果过大，请缩小范围或关闭几何详情"));
 
         if (route == CadExecutionKind.ReadOnly)
         {
@@ -206,35 +204,10 @@ public sealed class CadDispatcher
             // for command-context preselection clearing and can itself affect history.
             if (context.RequestedSelection != null)
                 throw new CadCommandException("execution_contract_violation", "只读命令不得请求选择更新");
-            return result;
+            return new ApplicationCallResult(result, document, state.ActiveSpaceId, state.Selection.ObjectIds, null);
         }
-        if (context.RequestedSelection == null || !result.Value<bool>("success")) return result;
-        try
-        {
-            EnsureDispatchDocument(document, state.ActiveSpaceId);
-            var ids = context.RequestedSelection.ToArray();
-            if (ids.Any(id => !IsUsable(id))) throw new CadCommandException("entity_not_found", "应用选择前实体已失效");
-            document.Editor.SetImpliedSelection(ids);
-            var actual = CaptureSelection(document, true);
-            if (actual.ObjectIds.Length != ids.Length || actual.ObjectIds.Except(ids).Any())
-                throw new CadCommandException("selection_failed", "CAD 实际选择与请求不一致");
-            return result;
-        }
-        catch (Exception error)
-        {
-            result = ExecutionResponses.Failure(callId, error is CadCommandException business ? business.Code : "selection_failed", error);
-            try
-            {
-                EnsureDispatchDocument(document, state.ActiveSpaceId);
-                document.Editor.SetImpliedSelection(state.Selection.ObjectIds);
-                var actual = CaptureSelection(document, true);
-                if (actual.ObjectIds.Length != state.Selection.ObjectIds.Length || actual.ObjectIds.Except(state.Selection.ObjectIds).Any())
-                    throw new InvalidOperationException("CAD 未恢复完整的原选择集");
-            }
-            catch (Exception restore)
-            { ((JArray)result["warnings"]!).Add(new JObject { ["code"] = "selection_restore_failed", ["message"] = restore.Message }); }
-            return result;
-        }
+        return new ApplicationCallResult(result, document, state.ActiveSpaceId, state.Selection.ObjectIds,
+            context.RequestedSelection?.ToArray());
     }
 
     private static void EnsureDispatchDocument(Document document, ObjectId activeSpaceId)
@@ -267,10 +240,21 @@ public sealed class CadDispatcher
         catch when (!strict) { return SelectionSnapshot.Empty; }
     }
 
-    private static void ApplySelection(Document document, ObjectId[] ids)
+    private static void ApplySelectionInCommandContext(Document document, ObjectId[] ids)
     {
         try { document.Editor.SetImpliedSelection(ids.Where(IsUsable).ToArray()); }
         catch { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
+    }
+
+    private static async Task ApplySelectionViaBridgeAsync(Document document, ObjectId activeSpaceId, ObjectId[] ids)
+    {
+        var selectionTask = await InApplicationContextAsync(() =>
+        {
+            EnsureDispatchDocument(document, activeSpaceId);
+            var expected = CaptureSelection(document, true).ObjectIds;
+            return SelectionCommandBridge.ApplyAsync(document, activeSpaceId, expected, ids);
+        });
+        await selectionTask;
     }
 
     private static bool IsUsable(ObjectId id)
@@ -323,5 +307,19 @@ public sealed class CadDispatcher
         public SelectionSnapshot(ObjectId[] objectIds, string[] handles) { ObjectIds = objectIds; Handles = handles; }
         public ObjectId[] ObjectIds { get; }
         public string[] Handles { get; }
+    }
+
+    private sealed class ApplicationCallResult
+    {
+        public ApplicationCallResult(JObject response)
+        { Response = response; Document = null!; ActiveSpaceId = ObjectId.Null; InitialSelection = Array.Empty<ObjectId>(); RequestedSelection = null; }
+        public ApplicationCallResult(JObject response, Document document, ObjectId activeSpaceId,
+            ObjectId[] initialSelection, ObjectId[]? requestedSelection)
+        { Response = response; Document = document; ActiveSpaceId = activeSpaceId; InitialSelection = initialSelection; RequestedSelection = requestedSelection; }
+        public JObject Response { get; }
+        public Document Document { get; }
+        public ObjectId ActiveSpaceId { get; }
+        public ObjectId[] InitialSelection { get; }
+        public ObjectId[]? RequestedSelection { get; }
     }
 }

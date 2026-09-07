@@ -31,6 +31,10 @@
 - 用 send_code_to_cad 的 initialSelection/selectedHandles 读取，再动态调用 editor.SetImpliedSelection 选择目标：最终选择应保留；随后固定读取仍返回该选择。
 - 详情开关关闭时不读取对应详情；200/1000/2000 个实体分批测试，超限明确报错。查询/选择已有 truncated 行为保留，不把截断结果当全图。
 - 测试验证失败保留原选择；若 AutoCAD 自身拒绝恢复，响应必须提示 selection_restore_failed，不能声称成功恢复。
+- 2.1.1 选择桥专项：在独立测试进程依次验证空→已有、非空A→相同A、非空A→不同B，以及非空旧选择→四个刚提交的新实体；每种都核对实际高亮和 Handle，反复执行时 Windows 应用日志不得再出现 acedSSSetFirst/AccessViolationException。
+- 验证内部选择命令带 Redraw 且不带 Session；选择后应保持夹点/高亮。写入→set_selection→一次U只撤销写入，选择桥不得增加空撤销步或进入重复命令历史。
+- 桥排队期间切图、切空间或改变当前选择应安全返回 mismatch/selection_state_changed，不覆盖新选择。PICKFIRST=0 返回 selection_unavailable 且不擅自改系统变量；纸空间背景视口、失效对象整批拒绝。
+- `clone_entities(selectCreated=true)` 也必须走选择桥；选择失败仍保留 success/committed/createdHandles 和 post_commit_selection_failed。框架所有恢复路径不得在应用上下文直接调用 SetImpliedSelection。
 
 ## 第二批：复制、变换与路径（未执行的项目不得勾选通过）
 

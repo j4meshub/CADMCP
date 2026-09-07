@@ -5,7 +5,7 @@ namespace CADMCP.Plugin;
 
 public static class CadMcpVersion
 {
-    public const string ProductVersion = "2.1.0";
+    public const string ProductVersion = "2.1.1";
     public const int ProtocolVersion = 2;
     public const int SettingsSchemaVersion = 1;
 

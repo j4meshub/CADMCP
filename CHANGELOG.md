@@ -2,6 +2,17 @@
 
 本文件记录已交付到仓库的功能与限制，不表示每个版本都已发布 GitHub Release 或 npm。唯一版本配置为根目录 `version.json`。
 
+## 2.1.1 — 2026-09-07
+
+- 修复框架在 AutoCAD 应用上下文直接调用 `Editor.SetImpliedSelection`，最终进入 `acedSSSetFirst` 并可能触发 `AccessViolationException`、导致 AutoCAD 2022 进程终止的问题。两次实际崩溃发生于2.1.0相同调用栈。
+- 新增统一 `SelectionCommandBridge`：应用上下文只校验并排队，实际选择写入由带 `UsePickSet | Redraw | NoUndoMarker` 等标志的非 Session 文档命令完成。命令排队前后复核 Document、活动空间、PICKFIRST、原选择和实体有效性，避免覆盖用户在间隙作出的选择。
+- set_selection、clone_entities(selectCreated=true)、固定写入后的选择恢复和最终兜底恢复全部改用选择桥；不再从这些应用上下文路径直接进入原生选择 API。选择失败不覆盖已经提交的复制结果。
+- 新增背景纸空间视口拒绝、选择状态变化及 PICKFIRST关闭的结构化失败；插件不会擅自改变用户系统变量、图层或图纸。
+- 保留 send_code_to_cad 的能力优先策略和完整 AutoCAD API 权限。框架桥接不禁止动态代码自行管理选择，动态撤销和事务语义不变。
+- 增加真实宿主回归场景：非空旧选择替换为四个刚提交的新实体，并检查选择命令不增加撤销步。源码编译和自动检查不能替代安装2.1.1后的真实 AutoCAD 2022崩溃回归。
+- 2026-09-07 安装包真实 AutoCAD 2022 回归已通过核心场景：空/非空选择替换、非空旧选择替换为四个刚提交实体、clone 自动选中新副本、两次固定写入对应两次 U，以及非法目标失败后保留原选择。范围与未覆盖项见 `docs/test-reports/CADMCP-2.1.1_SELECTION_BRIDGE_LIVE_2026-09-07.md`。
+- 产品统一升级到2.1.1；TCP协议仍为2，设置Schema仍为1。
+
 ## 2.1.0 — 2026-09-03
 
 范围：从第一批固定工具提交 `4048b97` 之后，汇总第二批开发、后续执行/撤销修复及已知事项。Plugin、CommandSet、Bundle、npm Server 统一升级为 2.1.0；DLL AssemblyVersion/FileVersion 为 2.1.0.0，构建标识继续附 Git SHA。TCP 协议 2、设置 Schema 1 不变。

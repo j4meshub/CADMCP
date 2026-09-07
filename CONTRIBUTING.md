@@ -15,6 +15,7 @@
 - 更新 Server 的中英描述/Zod Schema，以及插件 `CadMcpSettings.ToolNames` 和设置中文说明。旧偏好需保留，新工具默认启用。
 - 修改 Schema 时用真实 MCP `tools/list` 验证导出，不能只验证 Zod.parse。
 - 保持文档/空间标识、完整选择快照、Handle、单位与坐标系约定。写入要预检、原子事务、提交前响应物化和容量检查；超时未知结果不得自动重试。
+- 框架不得在应用上下文直接调用 `Editor.SetImpliedSelection`。set_selection、selectCreated 和框架选择恢复统一经过 `SelectionCommandBridge` 的带 Redraw/NoUndoMarker 文档命令；动态 C# 的完整选择能力不受此限制。
 - 固定创建（FixedWrite）和固定修改使用调度器拥有的原生命令撤销单元，不叠加框架 ActiveX StartUndoMark/EndUndoMark；不要绕过调度器直接调用写入 Execute。创建工具没有 dryRun 契约，不要误标为 PreviewableWrite。
 - 动态代码能力优先：auto 保留事务、none 自管，两者都走 CommandContext、undoGuaranteed=false；不以 UNDO 关闭/One/已有组为动态执行门槛，不添加实体白名单，不限制用户代码自管撤销，详见 ADR-003。不能因为撤销不保证就自动重试已经成功的调用。
 - 增加纯逻辑测试和真实宿主回归。只读工具必须插入到已有写操作与一次撤销之间测试，不能仅检查“能返回数据”。

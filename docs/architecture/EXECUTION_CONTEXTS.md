@@ -20,7 +20,7 @@
 | 声明 | 工具 | 调度/锁/选择行为 |
 | --- | --- | --- |
 | ReadOnly | say_hello、get_current_document_info、get_selected_entities、query_entities、get_entity_details | 主线程应用上下文；读锁；不设选择、不进命令上下文、不创建撤销边界 |
-| Selection | set_selection | 同一应用上下文回调中读锁校验；释放读锁后应用选择意图；失败恢复原选择 |
+| Selection | set_selection | 应用上下文读锁校验；由带 Redraw/NoUndoMarker 的内部文档命令应用并核对选择；失败恢复原选择 |
 | PreviewableWrite | clone_entities、transform_entities | 仅真正布尔dryRun=true走只读；缺省/false走写入，字符串等非法值先拒绝 |
 | FixedWrite | 四个创建工具 | 始终命令上下文；严格原生撤销、写锁、单事务；保留初始选择；不提供 dryRun |
 | CommandContext | send_code_to_cad | 命令上下文；auto 框架事务、none 自管；能力优先，撤销尽力而为；保留代码的选择效果 |
@@ -40,8 +40,9 @@
 
 ## 选择与写入约束
 
-- `set_selection` 先验证全部目标，再返回 `context.RequestSelection` 意图，调度器在应用上下文一次应用并核对。校验失败不触碰原选择。只有实际设置失败才尝试恢复并报告恢复错误。
-- 正式固定修改保留初始选择快照。`selectCreated=true` 在提交后应用；失败不能覆盖数据库成功事实，必须保留committed和副本Handle，单独warning。
+- `set_selection` 先验证全部目标，再返回 `context.RequestSelection` 意图。框架不得在应用上下文直接调用 `Editor.SetImpliedSelection`：该托管方法进入原生 `acedSSSetFirst`，2.1.0 已出现可重复的宿主访问冲突。选择意图必须由统一的内部文档命令桥应用并核对。
+- 选择桥使用 `UsePickSet | Redraw | NoUndoMarker | NoHistory | NoActionRecording | NoMultiple`，不使用 `Session`。排队前和命令执行时均核对活动 Document、空间、PICKFIRST、当前选择及目标；用户在间隙改变选择时拒绝覆盖。背景纸空间视口不得进入目标。命令回调内部捕获普通异常；不能尝试捕获并继续运行原生内存损坏。
+- 正式固定修改保留初始选择快照。`selectCreated=true` 在提交后也通过同一选择桥应用；失败不能覆盖数据库成功事实，必须保留committed和副本Handle，单独warning。创建/修改后的框架选择恢复和最终兜底恢复同样不得绕过选择桥。
 - 数据库修改必须仍有文档锁、单事务与撤销边界，提交前物化JSON并检查容量。不要为了消除空撤销记录而关闭全局UNDO、清空历史或自动多次U。
 - `send_code_to_cad` 无论auto/none都可能写库、调用命令、操作选择；none只表示不提供框架事务，绝不表示只读。不扫描C#文本猜测副作用，不新增可绕过写入路径的客户端readOnly开关。
 
@@ -92,6 +93,14 @@ ADR-002 实施时，四个旧创建工具和 `send_code_to_cad` 暂保留 `UndoB
 NoUndoMarker是AutoCAD注册命令的标志，不是给普通C# Execute方法加属性就能生效。只有确需命令上下文的固定只读API才考虑内部命令桥接，并验证外层不会另加标记。当前固定读取不需要该层；动态代码和真实写入绝不能使用它掩盖撤销。
 
 官方背景：[命令标志](https://help.autodesk.com/cloudhelp/2022/ENU/OARX-DevGuide-Managed/files/GUID-F77E8FE0-8034-4704-93BD-F717608F8223.htm)、[文档锁类别](https://help.autodesk.com/cloudhelp/2022/ENU/OARX-ManagedRefGuide/files/OARX-ManagedRefGuide-Autodesk_AutoCAD_ApplicationServices_DocumentLockMode.html)。这些API说明不能替代本项目的真实AutoCAD回归。
+
+## ADR-004：框架选择写入使用带命令标志的文档命令桥
+
+2026-09-07，2.1.0 在两次 `set_selection` 调用中以同一调用栈终止 AutoCAD 2022：`Editor.SetImpliedSelection` → `acedSSSetFirst` → `AccessViolationException`。当时固定选择路径虽在主线程应用上下文完成只读校验，却在释放读锁后直接写入原生 PickFirst/Grip 状态。普通托管 catch 无法把已经损坏的宿主恢复为安全状态。
+
+2.1.1 将框架拥有的选择写入集中到 `SelectionCommandBridge`。应用上下文只准备和排队意图；实际 `SetImpliedSelection` 在注册的非 Session 文档命令中执行。`Redraw` 使 PickFirst/Grip 集在命令完成后保留并刷新，`NoUndoMarker` 避免选择操作新增撤销单元。桥接命令排队前与执行时比较选择快照，防止异步间隙覆盖用户选择；所有目标在执行时重新打开验证。
+
+这项隔离只约束框架内部的 set_selection、selectCreated 与选择恢复。`send_code_to_cad` 仍是完整权限的 CommandContext，用户代码可以自行调用选择 API；不将动态代码改为固定选择桥，不扫描或禁止相关源码。真实宿主验收必须覆盖非空旧选择→四个刚提交的新实体，以及写入→选择→一次U。
 
 ## 必须防止的回归
 
